@@ -1,13 +1,15 @@
 import { Request as IttyRequest } from "itty-router";
 
-export type RouterRequest = Request & IttyRequest;
-
 declare global {
   // const MY_ENV_VAR: string
   // const MY_SECRET: string
   // const myKVNamespace: KVNamespace
 
-  interface Env {}
+  type RouterRequest = Request & IttyRequest;
+
+  interface Env {
+    buckets: DurableObjectNamespace;
+  }
 
   interface WebSocket {
     accept(): void;
@@ -20,6 +22,10 @@ declare global {
 
   interface ResponseInit {
     webSocket?: WebSocket;
+  }
+
+  interface DurableObjectState {
+    blockConcurrencyWhile: (fn: () => Promise<void>) => void;
   }
 
   interface Response {

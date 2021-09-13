@@ -10,4 +10,7 @@ format = "modules"
 main = "./worker.mjs"
 
 [durable_objects]
-bindings = []
+bindings = [
+  { name = "buckets", class_name = "Bucket" },
+  { name = "bucketsCoordinators", class_name = "BucketCoordinator" },
+]
