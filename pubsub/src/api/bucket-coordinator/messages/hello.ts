@@ -19,4 +19,4 @@ class HelloMessage extends BucketCoordinatorMessage<HelloMessageData> {
   }
 }
 
-export { HelloMessage };
+export { HelloMessage, HelloMessageData };

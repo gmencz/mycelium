@@ -1,4 +1,4 @@
-import { Client } from "~/durable-objects/bucket";
+import { Client } from "../../do";
 import { HeartbeatACKMessage } from "../heartbeat-ack";
 
 const handleHeartbeatMessage = (client: Client) => {

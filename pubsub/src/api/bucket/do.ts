@@ -12,6 +12,8 @@ import { HEARTBEAT_INTERVAL } from "./constants";
 import { handlePublishMessage } from "./messages/handlers/publish";
 import { handleHeartbeatMessage } from "./messages/handlers/heartbeat";
 import { BucketCoordinatorOp } from "../bucket-coordinator/protocol";
+import { HelloMessageData } from "../bucket-coordinator/messages/hello";
+import { HeartbeatMessage } from "../bucket-coordinator/messages/heartbeat";
 
 interface Client {
   id: string;
@@ -40,11 +42,14 @@ class Bucket implements DurableObject {
       const coordinatorName = `${this.state.id.name}:coordinator`;
       const coordinatorId = env.bucketsCoordinators.idFromName(coordinatorName);
       const coordinatorObject = env.bucketsCoordinators.get(coordinatorId);
-      const coordinatorResp = await fetch("https://coordinator", {
-        headers: {
-          Upgrade: "websocket"
+      const coordinatorResp = await coordinatorObject.fetch(
+        "https://coordinator",
+        {
+          headers: {
+            Upgrade: "websocket"
+          }
         }
-      });
+      );
 
       const webSocket = coordinatorResp.webSocket;
       if (!webSocket) {
@@ -52,6 +57,7 @@ class Bucket implements DurableObject {
         return;
       }
 
+      let heartbeatIntervalHandle: number | null = null;
       webSocket.accept();
 
       webSocket.addEventListener("message", message => {
@@ -62,17 +68,35 @@ class Bucket implements DurableObject {
           return;
         }
 
-        const { op } = payload;
+        const { op, d } = payload;
         switch (op) {
           case BucketCoordinatorOp.Hello:
-            // TODO
+            const { buckets, heartbeatInterval } =
+              d as unknown as HelloMessageData;
+
+            this.buckets = buckets;
+
+            heartbeatIntervalHandle = setInterval(() => {
+              webSocket.send(new HeartbeatMessage().toJSON());
+            }, heartbeatInterval);
 
             return;
+
+          // TODO: Handle other messages
 
           default:
             return;
         }
       });
+
+      const errorOrCloseHandler = () => {
+        if (heartbeatIntervalHandle) {
+          clearInterval(heartbeatIntervalHandle);
+        }
+      };
+
+      webSocket.addEventListener("error", errorOrCloseHandler);
+      webSocket.addEventListener("close", errorOrCloseHandler);
     });
 
     this.clients = [];
@@ -164,4 +188,4 @@ class Bucket implements DurableObject {
   fetch = async (request: Request) => await this.router.handle(request);
 }
 
-export { Bucket, Client };
+export { Bucket, Client, BucketInfo };
