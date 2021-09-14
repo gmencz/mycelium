@@ -8,8 +8,7 @@ import {
   ZodSchema,
   array,
   lazy,
-  record,
-  nativeEnum
+  record
 } from "zod";
 
 type Literal = boolean | null | number | string;

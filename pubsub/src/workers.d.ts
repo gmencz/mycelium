@@ -9,6 +9,7 @@ declare global {
 
   interface Env {
     buckets: DurableObjectNamespace;
+    bucketsCoordinators: DurableObjectNamespace;
   }
 
   interface WebSocket {

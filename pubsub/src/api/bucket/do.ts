@@ -1,32 +1,80 @@
 import { Router } from "itty-router";
 import { ZodError } from "zod";
 import { uuid } from "@cfworker/uuid";
-import { HelloMessage } from "./api/messages/hello";
-import { parseMessage } from "./api/messages/parse";
+import { HelloMessage } from "./messages/hello";
+import { parseMessage } from "./messages/parse";
 import {
   MyceliumCloseCode,
   MyceliumCloseMessage,
   MyceliumOp
-} from "./api/protocol";
-import { HEARTBEAT_INTERVAL } from "./api/constants";
-import { handlePublishMessage } from "./api/messages/handlers/publish";
-import { handleHeartbeatMessage } from "./api/messages/handlers/heartbeat";
+} from "./protocol";
+import { HEARTBEAT_INTERVAL } from "./constants";
+import { handlePublishMessage } from "./messages/handlers/publish";
+import { handleHeartbeatMessage } from "./messages/handlers/heartbeat";
+import { BucketCoordinatorOp } from "../bucket-coordinator/protocol";
 
 interface Client {
   id: string;
   webSocket: WebSocket;
 }
 
+interface BucketInfo {
+  name: string;
+}
+
 /**
  * Data center instance which Holds the clients connected to the pub-sub.
  */
 class Bucket implements DurableObject {
-  private id: DurableObjectId;
-  private clients: Client[];
+  private state: DurableObjectState;
+  private clients: Client[] = [];
+  private buckets: BucketInfo[] = [];
   private router: Router<Request>;
 
-  constructor(state: DurableObjectState) {
-    this.id = state.id;
+  constructor(state: DurableObjectState, env: Env) {
+    this.state = state;
+
+    // `blockConcurrencyWhile()` ensures no requests are delivered until
+    // initialization completes.
+    this.state.blockConcurrencyWhile(async () => {
+      const coordinatorName = `${this.state.id.name}:coordinator`;
+      const coordinatorId = env.bucketsCoordinators.idFromName(coordinatorName);
+      const coordinatorObject = env.bucketsCoordinators.get(coordinatorId);
+      const coordinatorResp = await fetch("https://coordinator", {
+        headers: {
+          Upgrade: "websocket"
+        }
+      });
+
+      const webSocket = coordinatorResp.webSocket;
+      if (!webSocket) {
+        // Not sure how to handle this as this should never happen.
+        return;
+      }
+
+      webSocket.accept();
+
+      webSocket.addEventListener("message", message => {
+        let payload;
+        try {
+          payload = parseMessage(JSON.parse(message.data));
+        } catch {
+          return;
+        }
+
+        const { op } = payload;
+        switch (op) {
+          case BucketCoordinatorOp.Hello:
+            // TODO
+
+            return;
+
+          default:
+            return;
+        }
+      });
+    });
+
     this.clients = [];
     this.router = Router()
       .get("/", this.handleClient)

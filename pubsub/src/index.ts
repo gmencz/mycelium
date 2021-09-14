@@ -24,8 +24,8 @@ router.get("/", (req: RouterRequest, env: Env) => {
 
 router.all("*", () => new Response("Not found", { status: 404 }));
 
-export { Bucket } from "./bucket";
-export { BucketCoordinator } from "./bucket-coordinator";
+export { Bucket } from "./api/bucket/do";
+export { BucketCoordinator } from "./api/bucket-coordinator/do";
 
 export default {
   fetch: router.handle

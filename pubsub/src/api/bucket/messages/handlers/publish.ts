@@ -1,6 +1,6 @@
 import { boolean, object } from "zod";
-import { MyceliumCloseCode, MyceliumCloseMessage } from "~/api/protocol";
-import { Client } from "~/bucket";
+import { MyceliumCloseCode, MyceliumCloseMessage } from "~/api/bucket/protocol";
+import { Client } from "~/api/bucket/do";
 import { MessageMessage } from "../message-message";
 import { Json, jsonSchema } from "../parse";
 
