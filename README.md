@@ -1,1 +1,1 @@
-Mycelium - fully-managed, globally distributed pub-sub messaging system.
+Mycelium - fully-managed, globally distributed services.
