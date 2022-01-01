@@ -1,0 +1,1 @@
+[] Add routing logic to handle KV inserts for new apps. This will be an internal endpoint so probably should prefix it with internal or something like that, e.g. POST /internal/apps. This endpoint should require an authentication token that only we know.
