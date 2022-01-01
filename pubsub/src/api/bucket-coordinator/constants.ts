@@ -1,3 +1,0 @@
-const HEARTBEAT_INTERVAL = 45_000; // 45 seconds
-
-export { HEARTBEAT_INTERVAL };

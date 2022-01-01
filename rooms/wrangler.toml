@@ -1,0 +1,16 @@
+name = ""
+type = "javascript"
+account_id = ""
+workers_dev = true
+
+[build]
+command = "npm run build"
+[build.upload]
+format = "modules"
+main = "./worker.mjs"
+
+[durable_objects]
+bindings = [
+  { name = "ROOM", class_name = "Room" },
+  { name = "LOBBY", class_name = "Lobby" }
+]
