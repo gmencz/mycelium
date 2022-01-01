@@ -22,7 +22,8 @@ export enum CloseMessage {
 
 export enum ReceiveOpCode {
   Hello = 0,
-  HeartbeatACK = 2
+  HeartbeatACK = 2,
+  IdentifySuccess = 4
 }
 
 export enum SendOpCode {

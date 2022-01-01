@@ -32,3 +32,9 @@ export class HelloMessage extends Message<HelloMessageData> {
     super(ReceiveOpCode.Hello, data);
   }
 }
+
+export class IdentifySuccessMessage extends Message {
+  constructor() {
+    super(ReceiveOpCode.IdentifySuccess);
+  }
+}

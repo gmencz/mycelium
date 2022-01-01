@@ -4,7 +4,7 @@ import { Bindings } from "../types";
 import { getAppSigningKey } from "../utils/app";
 import { verifySignature } from "../utils/crypto";
 import { generateSecWebSocketKey } from "../utils/ws-protocol";
-import { HeartbeatACKMessage } from "./message";
+import { HeartbeatACKMessage, IdentifySuccessMessage } from "./message";
 import { decodePayload, identifySchema, joinRoomSchema } from "./schemas";
 
 export function heartbeat(ws: WebSocket, hasIdentified: boolean) {
@@ -44,6 +44,7 @@ export async function identify(
     return;
   }
 
+  ws.send(new IdentifySuccessMessage().toJSON());
   return app;
 }
 
