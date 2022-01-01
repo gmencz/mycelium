@@ -1,5 +1,5 @@
 import { Replica, Socket } from "dog";
-import type { Bindings } from "./types";
+import type { Bindings } from "../types";
 
 export class Room extends Replica<Bindings> {
   clients = [];

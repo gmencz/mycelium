@@ -1,14 +1,4 @@
-import { object, string } from "zod";
-import { ReceiveOpCode } from "./op-code";
-
-export const joinRoomSchema = object({
-  name: string()
-});
-
-export const identifySchema = object({
-  appId: string(), // The id of the app.
-  signature: string() // The signature, created with the private app's signing key.
-});
+import { ReceiveOpCode } from "./codes";
 
 class Message<TData = any> {
   #op: ReceiveOpCode;

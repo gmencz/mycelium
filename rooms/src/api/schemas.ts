@@ -12,6 +12,15 @@ import {
   null as nullable
 } from "zod";
 
+export const joinRoomSchema = object({
+  name: string()
+});
+
+export const identifySchema = object({
+  app: string(), // The id of the app.
+  sig: string() // The signature, created with the private app's signing key.
+});
+
 type Literal = boolean | null | number | string;
 type Json = Literal | { [key: string]: Json } | Json[];
 const literalSchema = union([string(), number(), boolean(), nullable()]);

@@ -19,3 +19,14 @@ export enum CloseMessage {
   AlreadyAuthenticated = "You sent more than one identify payload. Don't do that!",
   AuthenticationFailed = "The identify payload is invalid."
 }
+
+export enum ReceiveOpCode {
+  Hello = 0,
+  HeartbeatACK = 2
+}
+
+export enum SendOpCode {
+  Heartbeat = 1,
+  JoinRoom = 3,
+  Identify = 5
+}

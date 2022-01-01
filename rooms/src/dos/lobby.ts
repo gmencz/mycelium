@@ -1,8 +1,8 @@
 import { Group } from "dog";
-import type { Bindings } from "./types";
+import type { Bindings } from "../types";
 
 export class Lobby extends Group<Bindings> {
-  limit = 10; // max conns per REPLICA stub
+  limit = 100;
 
   link(env: Bindings) {
     return {
