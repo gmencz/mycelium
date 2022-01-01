@@ -1,8 +1,4 @@
 const { build } = require("esbuild");
-const alias = require("esbuild-plugin-alias");
-const {
-  NodeModulesPolyfillPlugin
-} = require("@esbuild-plugins/node-modules-polyfill");
 
 build({
   bundle: true,
@@ -14,13 +10,7 @@ build({
   outfile: "./dist/worker.mjs",
   sourcemap: false,
   charset: "utf8",
-  minify: process.env.NODE_ENV === "production" ? true : false,
-  plugins: [
-    NodeModulesPolyfillPlugin(),
-    alias({
-      "@prisma/client": require.resolve("@prisma/client")
-    })
-  ]
+  minify: process.env.NODE_ENV === "production" ? true : false
 }).catch(err => {
   console.error(err.stack);
   process.exitCode = 1;

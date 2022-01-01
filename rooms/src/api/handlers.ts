@@ -1,7 +1,6 @@
 import { identify as identifyReplica } from "dog";
 import { CloseCode, CloseMessage } from "./codes";
 import { Bindings } from "../types";
-import { getAppSigningKey } from "../utils/app";
 import { verifySignature } from "../utils/crypto";
 import { generateSecWebSocketKey } from "../utils/ws-protocol";
 import { HeartbeatACKMessage, IdentifySuccessMessage } from "./message";
@@ -20,7 +19,8 @@ export async function identify(
   ws: WebSocket,
   hasIdentified: boolean,
   payload: ReturnType<typeof decodePayload>,
-  sid: string
+  sid: string,
+  env: Bindings
 ) {
   if (hasIdentified) {
     ws.close(CloseCode.AlreadyAuthenticated, CloseMessage.AlreadyAuthenticated);
@@ -36,9 +36,13 @@ export async function identify(
   }
 
   const { app, sig } = data;
-  const appSigningKey = await getAppSigningKey(app);
-  const verified = await verifySignature(`${sid}`, sig, appSigningKey);
+  const appSigningKey = await env.APPS_KV.get(app);
+  if (!appSigningKey) {
+    ws.close(CloseCode.AuthenticationFailed, CloseMessage.AuthenticationFailed);
+    return;
+  }
 
+  const verified = await verifySignature(`${sid}`, sig, appSigningKey);
   if (!verified) {
     ws.close(CloseCode.AuthenticationFailed, CloseMessage.AuthenticationFailed);
     return;

@@ -2,12 +2,17 @@ name = ""
 type = "javascript"
 account_id = ""
 workers_dev = true
+compatibility_date = "2022-01-01"
 
 [build]
 command = "npm run build"
 [build.upload]
 format = "modules"
 main = "./worker.mjs"
+
+kv_namespaces = [ 
+  { binding = "APPS_KV", id = "852c402ebe554a0298149c2dbbba3381" }
+]
 
 [durable_objects]
 bindings = [
