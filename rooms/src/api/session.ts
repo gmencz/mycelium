@@ -25,7 +25,7 @@ export function handleSession(ws: WebSocket, req: Request, env: Bindings) {
   );
 
   const identifyTimeoutHandle = createCloseTimeout(
-    MS_TO_IDENTIFY_BEFORE_TIMEOUT,
+    MS_TO_IDENTIFY_BEFORE_TIMEOUT(!!env.DEV),
     ws,
     CloseCode.AuthenticationTimedOut,
     CloseMessage.AuthenticationTimedOut
@@ -60,7 +60,7 @@ export function handleSession(ws: WebSocket, req: Request, env: Bindings) {
       }
 
       case SendOpCode.Identify: {
-        app = await identify(ws, hasIdentified, payload, sid);
+        app = await identify(ws, hasIdentified, payload, sid, env);
 
         if (app) {
           clearTimeout(identifyTimeoutHandle);

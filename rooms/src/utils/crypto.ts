@@ -46,3 +46,22 @@ export async function verifySignature(
 
   return verified;
 }
+
+export const id = (size: number = 21) => {
+  let generated = "";
+  const random = crypto.getRandomValues(new Uint8Array(size));
+
+  for (; size--; ) {
+    let n = 63 & random[size];
+    generated +=
+      n < 36
+        ? n.toString(36)
+        : n < 62
+        ? (n - 26).toString(36).toUpperCase()
+        : n < 63
+        ? "_"
+        : "-";
+  }
+
+  return generated;
+};
