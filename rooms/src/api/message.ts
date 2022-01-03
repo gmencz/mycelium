@@ -38,3 +38,13 @@ export class IdentifySuccessMessage extends Message {
     super(ReceiveOpCode.IdentifySuccess);
   }
 }
+
+interface JoinRoomSuccessMessageData {
+  name: string;
+}
+
+export class JoinRoomSuccessMessage extends Message<JoinRoomSuccessMessageData> {
+  constructor(data: JoinRoomSuccessMessageData) {
+    super(ReceiveOpCode.JoinRoomSuccess, data);
+  }
+}

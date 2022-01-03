@@ -5,7 +5,7 @@ import { json } from "../utils/responses";
 
 export const createApp = async (_req: RouterRequest, env: Bindings) => {
   const appId = uuid();
-  const signingKey = id();
+  const signingKey = id(32);
   await env.APPS_KV.put(appId, JSON.stringify({ signingKey }));
 
   return json(

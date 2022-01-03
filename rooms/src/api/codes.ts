@@ -6,7 +6,8 @@ export enum CloseCode {
   NotAuthenticated = 4004,
   AuthenticationTimedOut = 4005,
   AlreadyAuthenticated = 4006,
-  AuthenticationFailed = 4007
+  AuthenticationFailed = 4007,
+  NotAMemberOfThisRoom = 4008
 }
 
 export enum CloseMessage {
@@ -17,17 +18,20 @@ export enum CloseMessage {
   NotAuthenticated = "You sent us a payload prior to identifying.",
   AuthenticationTimedOut = "You didn't identify within 15 seconds of establishing the connection.",
   AlreadyAuthenticated = "You sent more than one identify payload. Don't do that!",
-  AuthenticationFailed = "The identify payload is invalid."
+  AuthenticationFailed = "The identify payload is invalid.",
+  NotAMemberOfThisRoom = "You are not a member of this room. Try joining it."
 }
 
 export enum ReceiveOpCode {
   Hello = 0,
   HeartbeatACK = 2,
-  IdentifySuccess = 4
+  IdentifySuccess = 4,
+  JoinRoomSuccess = 6
 }
 
 export enum SendOpCode {
   Heartbeat = 1,
   JoinRoom = 3,
-  Identify = 5
+  Identify = 5,
+  BroadcastToRoom = 7
 }
