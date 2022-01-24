@@ -19,3 +19,6 @@ bindings = [
   { name = "ROOM", class_name = "Room" },
   { name = "LOBBY", class_name = "Lobby" }
 ]
+
+[miniflare]
+env_path = ".env"

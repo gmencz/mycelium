@@ -6,6 +6,7 @@ export interface Bindings extends ModuleWorker.Bindings {
   ROOM: DurableObjectNamespace & Replica<Bindings>;
   APPS_KV: KVNamespace;
   DEV: string;
+  INTERNAL_SECRET: string;
 }
 
 export type RouterRequest = IttyRequest & Request;

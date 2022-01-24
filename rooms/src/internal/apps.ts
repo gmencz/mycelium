@@ -1,5 +1,6 @@
 import { uuid } from "@cfworker/uuid";
 import { App, Bindings, RouterRequest } from "../types";
+import { parseAuthorizationHeader } from "../utils/auth";
 import { id } from "../utils/crypto";
 import { json } from "../utils/responses";
 
