@@ -1,0 +1,31 @@
+{
+  "name": "mycelium",
+  "private": "true",
+  "description": "Mycelium - fully-managed, globally distributed pub/sub system.",
+  "scripts": {
+    "dev": "tsnd -r dotenv/config --respawn --transpile-only src/main.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gmencz/mycelium.git"
+  },
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/gmencz/mycelium/issues"
+  },
+  "homepage": "https://github.com/gmencz/mycelium#readme",
+  "dependencies": {
+    "nats": "^2.7.1",
+    "shortid": "^2.2.16",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.10.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node16": "^1.0.3",
+    "@types/node": "^17.0.42",
+    "@types/shortid": "^0.0.29",
+    "dotenv": "^16.0.1",
+    "nodemon": "^2.0.16",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^4.7.3"
+  }
+}
