@@ -83,6 +83,23 @@ async function main() {
 
           break;
         }
+
+        case "new-message": {
+          const webSockets = channelsWs.get(data.channel);
+          if (webSockets) {
+            broadcast(
+              webSockets,
+              JSON.stringify({
+                type: "new-message",
+                channel: data.channel,
+                data: data.data,
+              }),
+              data.wsId
+            );
+          }
+
+          break;
+        }
       }
     }
   })();
@@ -158,6 +175,24 @@ async function main() {
             );
 
             return;
+          }
+
+          case "message": {
+            const isSubscribed = wsChannels.get(ws)?.has(data.channel);
+            if (!isSubscribed) {
+              // Can only send messages on channels you're subscribed to.
+              return;
+            }
+
+            nc.publish(
+              "msg",
+              sc.encode({
+                type: "new-message",
+                channel: data.channel,
+                wsId: ws.id,
+                data: data.data,
+              })
+            );
           }
         }
       },
