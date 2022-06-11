@@ -15,12 +15,14 @@
   },
   "homepage": "https://github.com/gmencz/mycelium#readme",
   "dependencies": {
+    "jsonwebtoken": "^8.5.1",
     "nats": "^2.7.1",
     "shortid": "^2.2.16",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.10.0"
   },
   "devDependencies": {
     "@tsconfig/node16": "^1.0.3",
+    "@types/jsonwebtoken": "^8.5.8",
     "@types/node": "^17.0.42",
     "@types/shortid": "^0.0.29",
     "dotenv": "^16.0.1",

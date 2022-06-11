@@ -1,6 +1,7 @@
 import uWS, { App } from "uWebSockets.js";
 import { connect, JSONCodec } from "nats";
 import { generate } from "shortid";
+import { decode, JwtPayload, verify } from "jsonwebtoken";
 
 const NATS_HOST = process.env.NATS_HOST;
 if (!NATS_HOST) {
@@ -30,6 +31,14 @@ function broadcast(
   webSockets.forEach((ws) => {
     ws.send(message);
   });
+}
+
+function isPrivateChannel(channel: string) {
+  return channel.startsWith("private-");
+}
+
+async function getSigningKey(kid: string) {
+  return "placeholder-signing-key";
 }
 
 async function main() {
@@ -114,7 +123,21 @@ async function main() {
       open: (ws) => {
         ws.id = generate();
       },
-      message: (ws, message) => {
+      close: (ws) => {
+        // Cleanup
+        const channels = wsChannels.get(ws);
+        if (channels) {
+          channels.forEach((channel) => {
+            channelsWs.set(
+              channel,
+              (channelsWs.get(channel) || []).filter(({ id }) => id !== ws.id)
+            );
+          });
+
+          wsChannels.delete(ws);
+        }
+      },
+      message: async (ws, message) => {
         const data = JSON.parse(Buffer.from(message).toString());
 
         switch (data.type) {
@@ -122,6 +145,29 @@ async function main() {
             const isSubscribed = wsChannels.get(ws)?.has(data.channel);
             if (isSubscribed) {
               return;
+            }
+
+            if (isPrivateChannel(data.channel)) {
+              const { token } = data;
+              const decoded = decode(token, { complete: true });
+              if (!decoded) {
+                return;
+              }
+
+              const { kid } = decoded.header;
+              if (!kid) {
+                return;
+              }
+
+              const signingKey = await getSigningKey(kid);
+              let tokenPayload;
+              try {
+                tokenPayload = verify(token, signingKey) as JwtPayload;
+              } catch (error) {
+                return;
+              }
+
+              // TODO: Retrieve user stuff from the token
             }
 
             if (wsChannels.has(ws)) {
@@ -136,7 +182,7 @@ async function main() {
               channelsWs.set(data.channel, [ws]);
             }
 
-            // Notify other subscribers of this subscription.
+            // notify other subscribers of this subscription
             nc.publish(
               "msg",
               sc.encode({
@@ -164,7 +210,7 @@ async function main() {
               )
             );
 
-            // Notify other subscribers of this unsubscription.
+            // notify other subscribers of this unsubscription
             nc.publish(
               "msg",
               sc.encode({
@@ -180,7 +226,7 @@ async function main() {
           case "message": {
             const isSubscribed = wsChannels.get(ws)?.has(data.channel);
             if (!isSubscribed) {
-              // Can only send messages on channels you're subscribed to.
+              // can only send messages on channels you're subscribed to.
               return;
             }
 
