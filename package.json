@@ -3,7 +3,7 @@
   "private": "true",
   "description": "Mycelium - fully-managed, globally distributed pub/sub system.",
   "scripts": {
-    "dev": "tsnd -r dotenv/config --respawn --transpile-only src/main.ts"
+    "dev": "tsnd -r dotenv/config --respawn --transpile-only --exit-child src/main.ts"
   },
   "repository": {
     "type": "git",
@@ -15,6 +15,7 @@
   },
   "homepage": "https://github.com/gmencz/mycelium#readme",
   "dependencies": {
+    "@prisma/client": "^3.15.1",
     "jsonwebtoken": "^8.5.1",
     "nats": "^2.7.1",
     "shortid": "^2.2.16",
@@ -27,7 +28,12 @@
     "@types/shortid": "^0.0.29",
     "dotenv": "^16.0.1",
     "nodemon": "^2.0.16",
+    "prisma": "^3.15.1",
+    "ts-node": "^10.8.1",
     "ts-node-dev": "^2.0.0",
     "typescript": "^4.7.3"
+  },
+  "prisma": {
+    "seed": "ts-node --transpile-only prisma/seed.ts"
   }
 }

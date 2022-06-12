@@ -2,6 +2,7 @@ import uWS, { App } from "uWebSockets.js";
 import { connect, JSONCodec } from "nats";
 import { generate } from "shortid";
 import { decode, JwtPayload, verify } from "jsonwebtoken";
+import { db } from "./db";
 
 const NATS_HOST = process.env.NATS_HOST;
 if (!NATS_HOST) {
@@ -34,11 +35,25 @@ function broadcast(
 }
 
 function isPrivateChannel(channel: string) {
-  return channel.startsWith("private-");
+  return channel.startsWith("private");
 }
 
+function isPresenceChannel(channel: string) {
+  return channel.startsWith("presence");
+}
+
+// The "kid" (key identifier) should be the ID of an app.
 async function getSigningKey(kid: string) {
-  return "placeholder-signing-key";
+  const app = await db.app.findUnique({
+    where: { id: kid },
+    select: { id: true, signingKey: true },
+  });
+
+  if (!app) {
+    return;
+  }
+
+  return app.signingKey;
 }
 
 async function main() {
@@ -147,8 +162,15 @@ async function main() {
               return;
             }
 
-            if (isPrivateChannel(data.channel)) {
+            if (
+              isPrivateChannel(data.channel) ||
+              isPresenceChannel(data.channel)
+            ) {
               const { token } = data;
+              if (!token) {
+                return;
+              }
+
               const decoded = decode(token, { complete: true });
               if (!decoded) {
                 return;
@@ -160,14 +182,23 @@ async function main() {
               }
 
               const signingKey = await getSigningKey(kid);
+              if (!signingKey) {
+                return;
+              }
+
               let tokenPayload;
               try {
                 tokenPayload = verify(token, signingKey) as JwtPayload;
               } catch (error) {
+                console.log({ error });
+
                 return;
               }
 
-              // TODO: Retrieve user stuff from the token
+              if (isPresenceChannel(data.channel)) {
+                // Figure out the presence stuff
+                return;
+              }
             }
 
             if (wsChannels.has(ws)) {
