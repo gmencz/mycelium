@@ -3,6 +3,7 @@ import { connect, JSONCodec } from "nats";
 import { generate } from "shortid";
 import { decode, JwtPayload, verify } from "jsonwebtoken";
 import { db } from "./db";
+import { redis } from "./redis";
 
 const NATS_HOST = process.env.NATS_HOST;
 if (!NATS_HOST) {
@@ -197,6 +198,13 @@ async function main() {
 
               if (isPresenceChannel(data.channel)) {
                 // Figure out the presence stuff
+                const { user } = tokenPayload;
+                if (!user || !user.id) {
+                  return;
+                }
+
+                // Do redis stuff
+
                 return;
               }
             }

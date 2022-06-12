@@ -16,6 +16,7 @@
   "homepage": "https://github.com/gmencz/mycelium#readme",
   "dependencies": {
     "@prisma/client": "^3.15.1",
+    "ioredis": "^5.0.6",
     "jsonwebtoken": "^8.5.1",
     "nats": "^2.7.1",
     "shortid": "^2.2.16",
