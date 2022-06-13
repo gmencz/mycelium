@@ -39,10 +39,6 @@ function isPrivateChannel(channel: string) {
   return channel.startsWith("private");
 }
 
-function isPresenceChannel(channel: string) {
-  return channel.startsWith("presence");
-}
-
 // The "kid" (key identifier) should be the ID of an app.
 async function getSigningKey(kid: string) {
   const app = await db.app.findUnique({
@@ -57,6 +53,10 @@ async function getSigningKey(kid: string) {
   return app.signingKey;
 }
 
+// store this server's clients and their channels
+const wsChannels = new Map<uWS.WebSocket, Set<string>>();
+const channelsWs = new Map<string, uWS.WebSocket[]>();
+
 async function main() {
   // create a connection to a nats-server
   const nc = await connect({ servers: NATS_HOST });
@@ -65,66 +65,23 @@ async function main() {
   // create a codec
   const sc = JSONCodec();
 
-  // store this server's clients and their channels
-  const wsChannels = new Map<uWS.WebSocket, Set<string>>();
-  const channelsWs = new Map<string, uWS.WebSocket[]>();
-
   // create a simple subscriber and iterate over messages
   // matching the subscription
-  const sub = nc.subscribe("msg");
+  const sub = nc.subscribe("message");
   (async () => {
     for await (const m of sub) {
       const data: any = sc.decode(m.data);
-
-      switch (data.type) {
-        case "subscriber-added": {
-          const webSockets = channelsWs.get(data.channel);
-          if (webSockets) {
-            broadcast(
-              webSockets,
-              JSON.stringify({
-                type: "subscriber-added",
-                channel: data.channel,
-              }),
-              data.wsId
-            );
-          }
-
-          break;
-        }
-
-        case "subscriber-removed": {
-          const webSockets = channelsWs.get(data.channel);
-          if (webSockets) {
-            broadcast(
-              webSockets,
-              JSON.stringify({
-                type: "subscriber-removed",
-                channel: data.channel,
-              }),
-              data.wsId
-            );
-          }
-
-          break;
-        }
-
-        case "new-message": {
-          const webSockets = channelsWs.get(data.channel);
-          if (webSockets) {
-            broadcast(
-              webSockets,
-              JSON.stringify({
-                type: "new-message",
-                channel: data.channel,
-                data: data.data,
-              }),
-              data.wsId
-            );
-          }
-
-          break;
-        }
+      const webSockets = channelsWs.get(data.channel);
+      if (webSockets) {
+        broadcast(
+          webSockets,
+          JSON.stringify({
+            type: "message",
+            channel: data.channel,
+            data: data.data,
+          }),
+          data.wsId
+        );
       }
     }
   })();
@@ -163,10 +120,7 @@ async function main() {
               return;
             }
 
-            if (
-              isPrivateChannel(data.channel) ||
-              isPresenceChannel(data.channel)
-            ) {
+            if (isPrivateChannel(data.channel)) {
               const { token } = data;
               if (!token) {
                 return;
@@ -191,20 +145,6 @@ async function main() {
               try {
                 tokenPayload = verify(token, signingKey) as JwtPayload;
               } catch (error) {
-                console.log({ error });
-
-                return;
-              }
-
-              if (isPresenceChannel(data.channel)) {
-                // Figure out the presence stuff
-                const { user } = tokenPayload;
-                if (!user || !user.id) {
-                  return;
-                }
-
-                // Do redis stuff
-
                 return;
               }
             }
@@ -219,17 +159,15 @@ async function main() {
               channelsWs.get(data.channel)!.push(ws);
             } else {
               channelsWs.set(data.channel, [ws]);
-            }
 
-            // notify other subscribers of this subscription
-            nc.publish(
-              "msg",
-              sc.encode({
-                type: "subscriber-added",
-                channel: data.channel,
-                wsId: ws.id,
-              })
-            );
+              const key = `subscribers:${data.channel}`;
+              const isChannelCreated = await redis.exists(key);
+              if (!isChannelCreated) {
+                await redis.set(key, 1);
+              } else {
+                await redis.incr(key);
+              }
+            }
 
             return;
           }
@@ -249,15 +187,7 @@ async function main() {
               )
             );
 
-            // notify other subscribers of this unsubscription
-            nc.publish(
-              "msg",
-              sc.encode({
-                type: "subscriber-removed",
-                channel: data.channel,
-                wsId: ws.id,
-              })
-            );
+            await redis.decr(`subscribers:${data.channel}`);
 
             return;
           }
@@ -270,9 +200,8 @@ async function main() {
             }
 
             nc.publish(
-              "msg",
+              "message",
               sc.encode({
-                type: "new-message",
                 channel: data.channel,
                 wsId: ws.id,
                 data: data.data,
@@ -292,3 +221,23 @@ async function main() {
 }
 
 main();
+
+async function handleExit() {
+  await Promise.all(
+    [...channelsWs.keys()].map(async (channel) => {
+      const key = `subscribers:${channel}`;
+      const subscribersLeft = await redis.decrby(
+        key,
+        channelsWs.get(channel)?.length || 0
+      );
+
+      if (subscribersLeft === 0) {
+        await redis.del(key);
+      }
+    })
+  );
+}
+
+process.on("SIGINT", handleExit);
+process.on("SIGQUIT", handleExit);
+process.on("SIGTERM", handleExit);
