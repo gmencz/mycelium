@@ -21,20 +21,6 @@ interface RouteContext {
   sc: Codec<unknown>;
 }
 
-// The "kid" (key identifier) should be the ID of an app.
-async function getSigningKey(kid: string) {
-  const app = await db.app.findUnique({
-    where: { id: kid },
-    select: { id: true, signingKey: true },
-  });
-
-  if (!app) {
-    return;
-  }
-
-  return app.signingKey;
-}
-
 export async function routes(
   server: FastifyInstance,
   { webSocketsChannels, channelsWebSockets, nc, sc }: RouteContext
@@ -47,14 +33,18 @@ export async function routes(
       return;
     }
 
-    const isValidAppId = await redis.sismember("apps", appId);
-    if (!isValidAppId) {
+    const app = await db.app.findUnique({
+      where: { id: appId },
+      select: { id: true, signingKey: true },
+    });
+
+    if (!app) {
       webSocket.close(4001, "Invalid appId");
       return;
     }
 
     webSocket.id = generate();
-    webSocket.appId = appId;
+    webSocket.app = app;
     webSocketsChannels.set(webSocket, new Set());
 
     webSocket.on("close", async (code, message) => {
@@ -101,24 +91,12 @@ export async function routes(
               return;
             }
 
-            const decoded = decode(token, { complete: true });
-            if (!decoded) {
-              return;
-            }
-
-            const { kid } = decoded.header;
-            if (!kid) {
-              return;
-            }
-
-            const signingKey = await getSigningKey(kid);
-            if (!signingKey) {
-              return;
-            }
-
             let tokenPayload;
             try {
-              tokenPayload = verify(token, signingKey) as JwtPayload;
+              tokenPayload = verify(
+                token,
+                webSocket.app.signingKey
+              ) as JwtPayload;
             } catch (error) {
               return;
             }

@@ -1,5 +1,5 @@
 import type { Codec, NatsConnection } from "nats";
-import type { MyceliumWebSocket } from "./routes/websocket";
+import type { MyceliumWebSocket } from "../types";
 
 interface Params {
   nc: NatsConnection;

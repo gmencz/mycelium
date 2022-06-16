@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { db } from "../util/db";
 import { redis } from "../util/redis";
 
 interface GetAppChannels {
@@ -9,8 +10,13 @@ interface GetAppChannels {
 export async function routes(server: FastifyInstance) {
   server.get<GetAppChannels>("/apps/:appId/channels", async (req, reply) => {
     const { appId } = req.params;
-    const isValidAppId = await redis.sismember("apps", appId);
-    if (!isValidAppId) {
+
+    const app = await db.app.findUnique({
+      where: { id: appId },
+      select: { id: true },
+    });
+
+    if (!app) {
       reply.status(404).send({
         message: `App ${appId} not found`,
       });

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { redis } from "./redis";
-import type { MyceliumWebSocket } from "./types";
+import type { MyceliumWebSocket } from "../types";
 
 const FIFTEEN_SECONDS = 15_000;
 let shuttingDown = false;
