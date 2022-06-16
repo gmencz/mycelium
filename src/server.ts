@@ -3,16 +3,16 @@ import type { MyceliumWebSocket } from "./types";
 
 import fastify from "fastify";
 import ws, { SocketStream } from "@fastify/websocket";
-import { setupEnv } from "./setup-env";
+import { setupEnv } from "./util/env";
 import { connect, JSONCodec } from "nats";
-import { redis } from "./redis";
+import { redis } from "./util/redis";
 import { generate } from "shortid";
 import { decode, JwtPayload, verify } from "jsonwebtoken";
-import { db } from "./db";
+import { db } from "./util/db";
 import { routes as webSocketRoutes } from "./routes/websocket";
 import { routes as appsRoutes } from "./routes/apps";
-import { subscribeToMessages } from "./nats";
-import { handleShutdown } from "./handle-shutdown";
+import { subscribeToMessages } from "./util/nats";
+import { handleShutdown } from "./util/handle-shutdown";
 
 const { NATS_HOST, PORT } = setupEnv();
 

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { redis } from "../redis";
+import { redis } from "../util/redis";
 
 interface GetAppChannels {
   Params: { appId: string };

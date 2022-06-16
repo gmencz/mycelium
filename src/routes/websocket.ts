@@ -7,8 +7,8 @@ import type { MyceliumWebSocket } from "../types";
 
 import { decode, verify } from "jsonwebtoken";
 import { generate } from "shortid";
-import { db } from "../db";
-import { redis } from "../redis";
+import { db } from "../util/db";
+import { redis } from "../util/redis";
 
 interface WebSocketRoute {
   Querystring: { appId?: string };
