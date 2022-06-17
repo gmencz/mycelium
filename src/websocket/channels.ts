@@ -1,5 +1,21 @@
 import { z } from "zod";
-import { capabilitiesSchema } from "./routes/websocket";
+
+export const capabilitiesSchema = z.object({}).catchall(z.string().array());
+
+export function makeChannelName(channel: string, appId: string) {
+  return `${appId}:${channel}`;
+}
+
+export const jwtPayloadSchema = z.object({
+  "x-mycelium-capabilities": capabilitiesSchema.optional(),
+});
+
+export const channelNameSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .trim()
+  .regex(/^[a-zA-Z0-9_-]+$/);
 
 export function validateChannelCapability(
   capabilityNeeded: string,

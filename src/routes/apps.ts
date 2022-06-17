@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+
 import { db } from "../util/db";
 import { redis } from "../util/redis";
 
