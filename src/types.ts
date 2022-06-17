@@ -1,9 +1,13 @@
+import type { ApiKey } from "@prisma/client";
 import type { WebSocket } from "ws";
+import { z } from "zod";
+import { capabilitiesSchema } from "./routes/websocket";
 
 export interface MyceliumWebSocket extends WebSocket {
   id: string;
-  app: {
-    id: string;
-    signingKey: string;
+  auth: {
+    appId: string;
+    apiKeyId: ApiKey["id"];
+    capabilities: z.infer<typeof capabilitiesSchema>;
   };
 }

@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { nanoid } from "nanoid";
 
 const prisma = new PrismaClient();
 
@@ -6,19 +7,27 @@ async function main() {
   const apps = await Promise.all([
     prisma.app.create({
       data: {
+        id: nanoid(),
         name: "Sample App 1",
-        signingKey: "super-secret-signing-key-123",
+        keys: {
+          create: {
+            id: nanoid(),
+            secret: nanoid(32),
+            capabilities: {
+              "*": ["*"],
+            },
+          },
+        },
       },
-    }),
-    prisma.app.create({
-      data: {
-        name: "Sample App 2",
-        signingKey: "test-secret-signing-key-123",
+      select: {
+        id: true,
+        name: true,
+        keys: true,
       },
     }),
   ]);
 
-  console.log({ apps });
+  console.dir({ apps }, { depth: null });
 }
 
 main()
