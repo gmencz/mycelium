@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { MyceliumWebSocket } from "../../types";
 
 import { redis } from "../../util/redis";
@@ -14,32 +15,40 @@ interface Params {
   data: any;
 }
 
+const dataSchema = z
+  .object({
+    type: z.literal("unsubscribe"),
+    channel: channelNameSchema,
+  })
+  .strict();
+
 export async function handleUnsubscribe({
   webSocket,
   webSocketsChannels,
   channelsWebSockets,
   data,
 }: Params) {
-  let channel;
+  let payload;
   try {
-    channel = makeChannelName(
-      channelNameSchema.parse(data.channel),
-      webSocket.auth.appId
-    );
+    payload = dataSchema.parse(data);
   } catch (error) {
-    webSocket.send(
+    return webSocket.send(
       JSON.stringify({
-        type: "unsubscriptionError",
-        message: "Invalid channel name",
+        type: "error",
+        errors: ["Invalid payload"],
       })
     );
-
-    return;
   }
 
+  const channel = makeChannelName(payload.channel, webSocket.auth.appId);
   const isSubscribed = webSocketsChannels.get(webSocket)?.has(channel);
   if (!isSubscribed) {
-    return;
+    return webSocket.send(
+      JSON.stringify({
+        type: "subscriptionError",
+        errors: ["You're not subscribed to this channel"],
+      })
+    );
   }
 
   webSocketsChannels.get(webSocket)?.delete(channel);

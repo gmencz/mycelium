@@ -1,7 +1,9 @@
 import type { Codec, NatsConnection } from "nats";
+import { z } from "zod";
 import type { MyceliumWebSocket } from "../../types";
 
 import { redis } from "../../util/redis";
+import { jsonSchema } from "../../util/schemas";
 import {
   channelNameSchema,
   makeChannelName,
@@ -16,6 +18,14 @@ interface Params {
   sc: Codec<unknown>;
 }
 
+const dataSchema = z
+  .object({
+    type: z.literal("message"),
+    channel: channelNameSchema,
+    data: jsonSchema,
+  })
+  .strict();
+
 export async function handleMessage({
   webSocket,
   webSocketsChannels,
@@ -23,31 +33,35 @@ export async function handleMessage({
   nc,
   sc,
 }: Params) {
-  let channelName: string;
+  let payload;
   try {
-    channelName = channelNameSchema.parse(data.channel);
+    payload = dataSchema.parse(data);
   } catch (error) {
-    webSocket.send(
+    return webSocket.send(
       JSON.stringify({
-        type: "messageError",
-        message: "Invalid channel name",
+        type: "error",
+        errors: ["Invalid payload"],
       })
     );
-
-    return;
   }
 
-  const channel = makeChannelName(channelName, webSocket.auth.appId);
+  const channel = makeChannelName(payload.channel, webSocket.auth.appId);
   const isSubscribed = webSocketsChannels.get(webSocket)?.has(channel);
   if (!isSubscribed) {
-    // can only send messages on channels you're subscribed to.
-    return;
+    return webSocket.send(
+      JSON.stringify({
+        type: "messageError",
+        errors: [
+          "You can't send messages on channels you're not subscribed to",
+        ],
+      })
+    );
   }
 
   if (
     !validateChannelCapability(
       "message",
-      channelName,
+      payload.channel,
       webSocket.auth.capabilities
     )
   ) {
@@ -55,7 +69,7 @@ export async function handleMessage({
       JSON.stringify({
         type: "messageError",
         message:
-          "Your capabilities don't allow sending messages to this channel",
+          "Your capabilities don't allow sending messages on this channel",
       })
     );
   }

@@ -1,9 +1,19 @@
 import { PrismaClient } from "@prisma/client";
+import Redis from "ioredis";
 import { nanoid } from "nanoid";
 
 const prisma = new PrismaClient();
 
+const url = process.env.REDIS_URL;
+if (!url) {
+  throw new Error("REDIS_URL is missing");
+}
+
+const redis = new Redis(url);
+
 async function main() {
+  await redis.flushdb();
+
   const apps = await Promise.all([
     prisma.app.create({
       data: {

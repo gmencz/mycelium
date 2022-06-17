@@ -12,10 +12,13 @@ export const jwtPayloadSchema = z.object({
 
 export const channelNameSchema = z
   .string()
-  .min(1)
-  .max(255)
+  .min(1, "A channel name can't be empty")
+  .max(255, "A channel name can't be longer than 255 characters")
   .trim()
-  .regex(/^[a-zA-Z0-9_-]+$/);
+  .regex(
+    /^[a-zA-Z0-9_-]+$/,
+    "A channel name can only contain lower and uppercase letters, numbers and the following punctuation: _-"
+  );
 
 export function validateChannelCapability(
   capabilityNeeded: string,

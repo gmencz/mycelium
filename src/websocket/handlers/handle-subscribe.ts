@@ -1,6 +1,7 @@
 import type { MyceliumWebSocket } from "../../types";
 
 import { redis } from "../../util/redis";
+import { z, ZodError } from "zod";
 import {
   channelNameSchema,
   makeChannelName,
@@ -14,45 +15,68 @@ interface Params {
   data: any;
 }
 
+const dataSchema = z
+  .object({
+    type: z.literal("subscribe"),
+    channel: channelNameSchema,
+  })
+  .strict();
+
 export async function handleSubscribe({
   webSocket,
   webSocketsChannels,
   channelsWebSockets,
   data,
 }: Params) {
-  let channel: string;
+  let payload;
   try {
-    channel = channelNameSchema.parse(data.channel);
+    payload = dataSchema.parse(data);
   } catch (error) {
+    if (error instanceof ZodError) {
+      const { _errors } = error.format();
+
+      return webSocket.send(
+        JSON.stringify({
+          type: "error",
+          errors: _errors,
+        })
+      );
+    }
+
     return webSocket.send(
       JSON.stringify({
-        type: "subscriptionError",
-        message: "Invalid channel name",
+        type: "error",
+        errors: ["Invalid payload"],
       })
     );
   }
 
-  const isSubscribed = webSocketsChannels.get(webSocket)?.has(channel);
+  const isSubscribed = webSocketsChannels.get(webSocket)?.has(payload.channel);
   if (isSubscribed) {
-    return;
+    return webSocket.send(
+      JSON.stringify({
+        type: "subscriptionError",
+        errors: ["You're already subscribed to this channel"],
+      })
+    );
   }
 
   if (
     !validateChannelCapability(
       "subscribe",
-      channel,
+      payload.channel,
       webSocket.auth.capabilities
     )
   ) {
     return webSocket.send(
       JSON.stringify({
         type: "subscriptionError",
-        message: "Your capabilities don't allow subscribing to this channel",
+        errors: ["Your capabilities don't allow subscribing to this channel"],
       })
     );
   }
 
-  channel = makeChannelName(channel, webSocket.auth.appId);
+  const channel = makeChannelName(payload.channel, webSocket.auth.appId);
   if (webSocketsChannels.has(webSocket)) {
     webSocketsChannels.get(webSocket)!.add(channel);
   } else {

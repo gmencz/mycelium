@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { db } from "../util/db";
 import { capabilitiesSchema } from "./channels";
+import { CloseCode } from "./protocol";
 
 interface Params {
   webSocket: MyceliumWebSocket;
@@ -28,15 +29,15 @@ export async function authenticateWebSocket({
 }: Params) {
   if (!key && !token) {
     return {
-      code: 4001,
-      message: "Provide either a key or a token",
+      code: CloseCode.AuthenticationError,
+      errors: ["Provide either a key or a token"],
     };
   }
 
   if (key && token) {
     return {
-      code: 4001,
-      message: "Provide either a key or a token and NOT both",
+      code: CloseCode.AuthenticationError,
+      errors: ["Provide either a key or a token and NOT both"],
     };
   }
 
@@ -55,8 +56,8 @@ export async function authenticateWebSocket({
 
     if (!apiKey) {
       return {
-        code: 4001,
-        message: "Invalid key",
+        code: CloseCode.AuthenticationError,
+        errors: ["Invalid key"],
       };
     }
 
@@ -73,23 +74,23 @@ export async function authenticateWebSocket({
       jwt = decode(token, { complete: true });
     } catch (error) {
       return {
-        code: 4001,
-        message: "Invalid token",
+        code: CloseCode.AuthenticationError,
+        errors: ["Invalid token"],
       };
     }
 
     if (!jwt) {
       return {
-        code: 4001,
-        message: "Invalid token",
+        code: CloseCode.AuthenticationError,
+        errors: ["Invalid token"],
       };
     }
 
     const { kid: apiKeyId } = jwt.header;
     if (!apiKeyId) {
       return {
-        code: 4001,
-        message: "Invalid token",
+        code: CloseCode.AuthenticationError,
+        errors: ["Invalid token"],
       };
     }
 
@@ -107,8 +108,8 @@ export async function authenticateWebSocket({
 
     if (!apiKey) {
       return {
-        code: 4001,
-        message: "Invalid token",
+        code: CloseCode.AuthenticationError,
+        errors: ["Invalid token"],
       };
     }
 
@@ -131,8 +132,8 @@ export async function authenticateWebSocket({
       );
     } catch (error) {
       return {
-        code: 4001,
-        message: "Invalid token",
+        code: CloseCode.AuthenticationError,
+        errors: ["Invalid token"],
       };
     }
 
@@ -144,16 +145,16 @@ export async function authenticateWebSocket({
         jwtCapabilities = capabilitiesSchema.parse(rawJwtCapabilities);
       } catch (error) {
         return {
-          code: 4001,
-          message: "Invalid token capabilities",
+          code: CloseCode.AuthenticationError,
+          errors: ["Invalid token capabilities"],
         };
       }
 
       const jwtCapabilitiesKeys = Object.keys(jwtCapabilities);
       if (jwtCapabilitiesKeys.length > 250) {
         return {
-          code: 4001,
-          message: "Invalid token capabilities, 250 max capabilities",
+          code: CloseCode.AuthenticationError,
+          errors: ["Invalid token capabilities, 250 max capabilities"],
         };
       }
 

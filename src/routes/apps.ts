@@ -19,7 +19,7 @@ export async function routes(server: FastifyInstance) {
 
     if (!app) {
       reply.status(404).send({
-        message: `App ${appId} not found`,
+        errors: [`App ${appId} not found`],
       });
 
       return;
