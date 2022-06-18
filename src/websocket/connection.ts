@@ -30,14 +30,14 @@ export async function authenticateWebSocket({
   if (!key && !token) {
     return {
       code: CloseCode.AuthenticationError,
-      errors: ["Provide either a key or a token"],
+      message:"Provide either a key or a token"
     };
   }
 
   if (key && token) {
     return {
       code: CloseCode.AuthenticationError,
-      errors: ["Provide either a key or a token and NOT both"],
+      message:"Provide either a key or a token and NOT both"
     };
   }
 
@@ -57,7 +57,7 @@ export async function authenticateWebSocket({
     if (!apiKey) {
       return {
         code: CloseCode.AuthenticationError,
-        errors: ["Invalid key"],
+        message:"Invalid key"
       };
     }
 
@@ -75,14 +75,14 @@ export async function authenticateWebSocket({
     } catch (error) {
       return {
         code: CloseCode.AuthenticationError,
-        errors: ["Invalid token"],
+        message:"Invalid token"
       };
     }
 
     if (!jwt) {
       return {
         code: CloseCode.AuthenticationError,
-        errors: ["Invalid token"],
+        message:"Invalid token"
       };
     }
 
@@ -90,7 +90,7 @@ export async function authenticateWebSocket({
     if (!apiKeyId) {
       return {
         code: CloseCode.AuthenticationError,
-        errors: ["Invalid token"],
+        message:"Invalid token"
       };
     }
 
@@ -109,7 +109,7 @@ export async function authenticateWebSocket({
     if (!apiKey) {
       return {
         code: CloseCode.AuthenticationError,
-        errors: ["Invalid token"],
+        message:"Invalid token"
       };
     }
 
@@ -133,7 +133,7 @@ export async function authenticateWebSocket({
     } catch (error) {
       return {
         code: CloseCode.AuthenticationError,
-        errors: ["Invalid token"],
+        message:"Invalid token"
       };
     }
 
@@ -146,7 +146,7 @@ export async function authenticateWebSocket({
       } catch (error) {
         return {
           code: CloseCode.AuthenticationError,
-          errors: ["Invalid token capabilities"],
+          message:"Invalid token capabilities"
         };
       }
 
@@ -154,7 +154,7 @@ export async function authenticateWebSocket({
       if (jwtCapabilitiesKeys.length > 250) {
         return {
           code: CloseCode.AuthenticationError,
-          errors: ["Invalid token capabilities, 250 max capabilities"],
+          message:"Invalid token capabilities, 250 max capabilities"
         };
       }
 

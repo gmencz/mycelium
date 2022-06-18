@@ -5,7 +5,6 @@ import type { Codec, NatsConnection } from "nats";
 import type { MyceliumWebSocket } from "../types";
 
 import { decode, verify } from "jsonwebtoken";
-import { generate } from "shortid";
 import { z } from "zod";
 import { db } from "../util/db";
 import { redis } from "../util/redis";

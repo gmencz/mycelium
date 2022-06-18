@@ -1,55 +1,95 @@
 import type { WebSocket } from "ws";
 import type { MyceliumWebSocket } from "./types";
+import type { FastifyInstance, FastifyServerOptions } from "fastify";
+import type { NatsConnection } from "nats";
 
 import fastify from "fastify";
 import ws, { SocketStream } from "@fastify/websocket";
 import { setupEnv } from "./util/env";
 import { connect, JSONCodec } from "nats";
 import { redis } from "./util/redis";
-import { generate } from "shortid";
 import { decode, JwtPayload, verify } from "jsonwebtoken";
 import { db } from "./util/db";
 import { routes as webSocketRoutes } from "./routes/websocket";
 import { routes as appsRoutes } from "./routes/apps";
+import { routes as healthRoutes } from "./routes/health";
 import { subscribeToMessages } from "./util/nats";
-import { handleShutdown } from "./util/handle-shutdown";
+import { beforeShutdown } from "./util/before-shutdown";
 
-const { NATS_HOST, PORT } = setupEnv();
-
-// Store the server's clients and their channels
-const webSocketsChannels = new Map<MyceliumWebSocket, Set<string>>();
-const channelsWebSockets = new Map<string, MyceliumWebSocket[]>();
-const server = fastify({ logger: true });
+const { NATS_HOST, PORT, INTERNAL_API_SECRET } = setupEnv();
 
 const TEN_MB = 1_048_576;
-server.register(ws, {
-  options: { clientTracking: false, maxPayload: TEN_MB },
-});
+export async function build(opts?: FastifyServerOptions) {
+  // Store the server's clients and their channels
+  const webSocketsChannels = new Map<MyceliumWebSocket, Set<string>>();
+  const channelsWebSockets = new Map<string, MyceliumWebSocket[]>();
+  const server = fastify(opts);
+  const nc = await connect({ servers: NATS_HOST });
+  server.log.info(`Connected to NATS at ${nc.getServer()}`);
+  const sc = JSONCodec();
+  subscribeToMessages({ channelsWebSockets, nc, sc });
 
-const start = async () => {
-  try {
-    const nc = await connect({ servers: NATS_HOST });
-    server.log.info(`Connected to NATS at ${nc.getServer()}`);
-    const sc = JSONCodec();
-    subscribeToMessages({ channelsWebSockets, nc, sc });
+  server.register(ws, {
+    options: { clientTracking: false, maxPayload: TEN_MB },
+  });
 
-    server.register(webSocketRoutes, {
-      channelsWebSockets,
-      nc,
-      sc,
-      webSocketsChannels,
-    });
+  server.register(webSocketRoutes, {
+    channelsWebSockets,
+    nc,
+    sc,
+    webSocketsChannels,
+    prefix: "/ws",
+  });
 
-    server.register(appsRoutes);
+  server.register(appsRoutes, { prefix: "/apps" });
 
-    await server.listen({ port: Number(PORT) });
-  } catch (err) {
-    server.log.error(
-      `mycelium failed to listen to port ${PORT}, error: ${err}`
+  server.register(healthRoutes, {
+    prefix: "/health",
+    nc,
+    authSecret: INTERNAL_API_SECRET,
+  });
+
+  return { server, nc, channelsWebSockets, webSocketsChannels };
+}
+
+interface TeardownParams {
+  server: FastifyInstance;
+  nc: NatsConnection;
+  webSocketsChannels: Map<MyceliumWebSocket, Set<string>>;
+  channelsWebSockets: Map<string, MyceliumWebSocket[]>;
+}
+
+export async function teardown({
+  server,
+  nc,
+  webSocketsChannels,
+  channelsWebSockets,
+}: TeardownParams) {
+  // Try to close all open websocket connections telling them to reconnect
+  // because this server is shutting down.
+  [...webSocketsChannels.keys()].forEach((webSocket) => {
+    try {
+      webSocket.close(4008, "Reconnect");
+    } catch {}
+  });
+
+  // Update state of channels subscribers in Redis.
+  const channels = channelsWebSockets.keys();
+  for await (const channel of channels) {
+    const key = `subscribers:${channel}`;
+    const subscribersLeft = await redis.decrby(
+      key,
+      channelsWebSockets.get(channel)?.length || 0
     );
-    process.exit(1);
-  }
-};
 
-start();
-handleShutdown({ channelsWebSockets, webSocketsChannels, server });
+    if (subscribersLeft === 0) {
+      await redis.del(key);
+    }
+  }
+
+  // Close the server and its dependencies.
+  await server.close();
+  await nc.close();
+  await redis.quit();
+  await db.$disconnect();
+}
