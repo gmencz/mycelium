@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
 
+import { decode } from "jsonwebtoken";
+import { parseAuthorizationHeader } from "../util/auth";
 import { db } from "../util/db";
 import { redis } from "../util/redis";
 
@@ -9,29 +11,68 @@ interface GetAppChannels {
 }
 
 export async function routes(server: FastifyInstance) {
-  server.get<GetAppChannels>("/apps/:appId/channels", async (req, reply) => {
+  server.get<GetAppChannels>("/:appId/channels", async (req, reply) => {
     const { appId } = req.params;
+    let token;
+    try {
+      token = parseAuthorizationHeader(req.headers.authorization);
+    } catch (error) {
+      return reply.status(401).send({
+        errors: [(error as Error).message],
+      });
+    }
 
-    const app = await db.app.findUnique({
-      where: { id: appId },
-      select: { id: true },
+    let jwt;
+    try {
+      jwt = decode(token, { complete: true });
+    } catch (error) {
+      return reply.status(401).send({
+        errors: ["Invalid authorization token"],
+      });
+    }
+
+    if (!jwt) {
+      return reply.status(401).send({
+        errors: ["Invalid authorization token"],
+      });
+    }
+
+    const { kid: apiKeyId } = jwt.header;
+    if (!apiKeyId) {
+      return reply.status(401).send({
+        errors: ["Invalid authorization token"],
+      });
+    }
+
+    const apiKey = await db.apiKey.findFirst({
+      where: {
+        AND: [{ id: { equals: apiKeyId } }, { appId: { equals: appId } }],
+      },
+      select: {
+        id: true,
+        secret: true,
+        capabilities: true,
+        app: {
+          select: {
+            id: true,
+          },
+        },
+      },
     });
 
-    if (!app) {
-      reply.status(404).send({
-        errors: [`App ${appId} not found`],
+    if (!apiKey) {
+      return reply.status(401).send({
+        errors: ["Invalid authorization token"],
       });
-
-      return;
     }
 
     const filterByPrefix = req.query.filterByPrefix;
     const cursor = Number(req.query.cursor || 0);
     let match: string;
     if (filterByPrefix) {
-      match = `subscribers:${appId}:${filterByPrefix}*`;
+      match = `subscribers:${apiKey.app.id}:${filterByPrefix}*`;
     } else {
-      match = `subscribers:${appId}:*`;
+      match = `subscribers:${apiKey.app.id}:*`;
     }
 
     const [updatedCursor, maybeDuplicateChannels] = await redis.scan(

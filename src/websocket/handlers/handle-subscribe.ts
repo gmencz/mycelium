@@ -90,4 +90,10 @@ export async function handleSubscribe({
   }
 
   await redis.incr(`subscribers:${channel}`);
+  return webSocket.send(
+    JSON.stringify({
+      type: "subscriptionSuccess",
+      channel: payload.channel,
+    })
+  );
 }

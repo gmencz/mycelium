@@ -65,4 +65,11 @@ export async function handleUnsubscribe({
   if (subscribersLeft === 0) {
     await redis.del(key);
   }
+
+  return webSocket.send(
+    JSON.stringify({
+      type: "unsubscriptionSuccess",
+      channel: payload.channel,
+    })
+  );
 }

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { NatsConnection } from "nats";
 
+import { parseAuthorizationHeader } from "../util/auth";
 import { db } from "../util/db";
 import { redis } from "../util/redis";
 
@@ -14,23 +15,16 @@ export async function routes(
   { nc, authSecret }: RouteContext
 ) {
   server.get("/", async (req, reply) => {
-    const authHeader = req.headers["authorization"];
-    if (!authHeader) {
-      return reply.status(401).send({
-        errors: [`Missing authorization header`],
-      });
-    }
-
-    if (authHeader.startsWith("Bearer ")) {
-      const token = authHeader.substring(7, authHeader.length);
+    try {
+      const token = parseAuthorizationHeader(req.headers.authorization);
       if (token !== authSecret) {
         return reply.status(401).send({
           errors: [`Invalid authorization token`],
         });
       }
-    } else {
+    } catch (error) {
       return reply.status(401).send({
-        errors: [`Invalid authorization header`],
+        errors: [(error as Error).message],
       });
     }
 

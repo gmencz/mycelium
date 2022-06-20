@@ -1,20 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import type { WebSocket } from "ws";
-import type { JwtPayload } from "jsonwebtoken";
 import type { Codec, NatsConnection } from "nats";
 import type { MyceliumWebSocket } from "../types";
 
-import { decode, verify } from "jsonwebtoken";
-import { z } from "zod";
-import { db } from "../util/db";
-import { redis } from "../util/redis";
-import {
-  capabilitiesSchema,
-  channelNameSchema,
-  jwtPayloadSchema,
-  makeChannelName,
-  validateChannelCapability,
-} from "../websocket/channels";
 import { handleSubscribe } from "../websocket/handlers/handle-subscribe";
 import { handleUnsubscribe } from "../websocket/handlers/handle-unsubscribe";
 import { handleMessage } from "../websocket/handlers/handle-message";
@@ -58,6 +45,14 @@ export async function routes(
       const data = JSON.parse(message.toString());
 
       switch (data.type) {
+        case "ping": {
+          return webSocket.send(
+            JSON.stringify({
+              type: "pong",
+            })
+          );
+        }
+
         case "subscribe": {
           return handleSubscribe({
             webSocket,

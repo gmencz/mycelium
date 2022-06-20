@@ -3,60 +3,59 @@ import type { MyceliumWebSocket } from "../../types";
 
 import { build, teardown } from "../../server";
 
-describe("/health", () => {
-  let ctx: Awaited<ReturnType<typeof build>>;
-  beforeAll(async () => {
-    ctx = await build();
+let ctx: Awaited<ReturnType<typeof build>>;
+beforeAll(async () => {
+  ctx = await build();
+});
+
+afterAll(async () => {
+  await teardown(ctx);
+});
+
+it("should return 200 if everything is okay", async () => {
+  const response = await ctx.server.inject({
+    method: "GET",
+    url: "/health",
+    headers: {
+      authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`,
+    },
   });
 
-  afterAll(async () => {
-    await teardown(ctx);
+  expect(response.statusCode).toBe(200);
+});
+
+it("should return 401 to unauthenticated requests", async () => {
+  const response1 = await ctx.server.inject({
+    method: "GET",
+    url: "/health",
   });
 
-  it("should return 200 if everything is okay", async () => {
-    const response = await ctx.server.inject({
-      method: "GET",
-      url: "/health",
-      headers: {
-        authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`,
-      },
-    });
+  expect(response1.statusCode).toBe(401);
 
-    expect(response.statusCode).toBe(200);
+  const response2 = await ctx.server.inject({
+    method: "GET",
+    url: "/health",
+    headers: {
+      authorization: "Bearer invalid-token",
+    },
   });
 
-  it("should return 401 to unauthenticated requests", async () => {
-    const response1 = await ctx.server.inject({
-      method: "GET",
-      url: "/health",
-    });
+  expect(response2.statusCode).toBe(401);
+});
 
-    expect(response1.statusCode).toBe(401);
+it("should show what's causing the server to be unhealthy", async () => {
+  // Close the NATS connection on purpose.
+  await ctx.nc.close();
 
-    const response2 = await ctx.server.inject({
-      method: "GET",
-      url: "/health",
-      headers: {
-        authorization: "Bearer invalid-token",
-      },
-    });
-
-    expect(response2.statusCode).toBe(401);
+  const response = await ctx.server.inject({
+    method: "GET",
+    url: "/health",
+    headers: {
+      authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`,
+    },
   });
 
-  it("should show what's causing the server to be unhealthy", async () => {
-    // Close the NATS connection on purpose.
-    await ctx.nc.close();
-
-    const response = await ctx.server.inject({
-      method: "GET",
-      url: "/health",
-      headers: {
-        authorization: `Bearer ${process.env.INTERNAL_API_SECRET}`,
-      },
-    });
-
-    expect(response.json()).toMatchInlineSnapshot(`
+  expect(response.json()).toMatchInlineSnapshot(`
       Object {
         "errors": Array [
           "NATS connection is closed",
@@ -64,6 +63,5 @@ describe("/health", () => {
       }
     `);
 
-    expect(response.statusCode).toBe(500);
-  });
+  expect(response.statusCode).toBe(500);
 });
