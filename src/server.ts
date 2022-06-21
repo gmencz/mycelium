@@ -13,7 +13,7 @@ import { routes as appsRoutes } from "./routes/apps";
 import { routes as healthRoutes } from "./routes/health";
 import { subscribeToMessages } from "./util/nats";
 
-const { NATS_HOST, PORT, INTERNAL_API_SECRET } = setupEnv();
+const { NATS_HOST } = setupEnv();
 
 const TEN_MB = 1_048_576;
 export async function build(opts?: FastifyServerOptions) {
@@ -30,6 +30,10 @@ export async function build(opts?: FastifyServerOptions) {
     options: { clientTracking: false, maxPayload: TEN_MB },
   });
 
+  server.get("/", (_, reply) => {
+    reply.send("Hello from Mycelium");
+  });
+
   server.register(webSocketRoutes, {
     channelsWebSockets,
     nc,
@@ -42,8 +46,6 @@ export async function build(opts?: FastifyServerOptions) {
 
   server.register(healthRoutes, {
     prefix: "/health",
-    nc,
-    authSecret: INTERNAL_API_SECRET,
   });
 
   return { server, nc, channelsWebSockets, webSocketsChannels };

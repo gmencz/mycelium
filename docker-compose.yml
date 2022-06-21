@@ -5,7 +5,8 @@ services:
     image: nats:latest
     ports:
       - "4222:4222"
-    command: -js
+      - "8222:8222"
+    command: -js -m 8222
 
   db:
     image: postgres:latest

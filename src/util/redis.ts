@@ -5,6 +5,9 @@ if (!url) {
   throw new Error("REDIS_URL is missing");
 }
 
-const redis = new Redis(url);
+const redis = new Redis(
+  url,
+  process.env.NODE_ENV === "development" ? {} : { family: 6 }
+);
 
 export { redis };

@@ -27,7 +27,10 @@ async function start(port: number) {
       }
     );
 
-    await server.listen({ port });
+    await server.listen({
+      port,
+      host: process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost",
+    });
   } catch (err) {
     console.error(`Server failed to start on port ${port}, error: ${err}`);
     process.exit(1);

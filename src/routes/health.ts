@@ -1,61 +1,43 @@
 import type { FastifyInstance } from "fastify";
-import type { NatsConnection } from "nats";
 
-import { parseAuthorizationHeader } from "../util/auth";
+import fetch from "cross-fetch";
 import { db } from "../util/db";
 import { redis } from "../util/redis";
 
-interface RouteContext {
-  nc: NatsConnection;
-  authSecret: string;
+const NATS_HEALTHCHECK_ENDPOINT = process.env.NATS_HEALTHCHECK_ENDPOINT;
+if (!NATS_HEALTHCHECK_ENDPOINT) {
+  throw new Error("NATS_HEALTHCHECK_ENDPOINT is missing");
 }
 
-export async function routes(
-  server: FastifyInstance,
-  { nc, authSecret }: RouteContext
-) {
+export async function routes(server: FastifyInstance) {
   server.get("/", async (req, reply) => {
-    try {
-      const token = parseAuthorizationHeader(req.headers.authorization);
-      if (token !== authSecret) {
-        return reply.status(401).send({
-          errors: [`Invalid authorization token`],
-        });
-      }
-    } catch (error) {
-      return reply.status(401).send({
-        errors: [(error as Error).message],
-      });
-    }
-
-    const errors: string[] = [];
+    const host = req.headers["X-Forwarded-Host"] ?? req.headers["host"];
 
     try {
-      await db.$queryRaw`SELECT 1`;
+      await Promise.all([
+        // If we can make a simple query and make a HEAD request to ourselves, then we're good.
+        fetch(`http://${host}/`, { method: "HEAD" }).then((r) => {
+          if (!r.ok) return Promise.reject(r);
+        }),
+
+        // Database check
+        db.$queryRaw`SELECT 1`,
+
+        // Redis check
+        redis.ping(),
+
+        // NATS check
+        fetch(NATS_HEALTHCHECK_ENDPOINT!, { method: "GET" }).then((r) => {
+          if (!r.ok) return Promise.reject(r);
+        }),
+      ]);
+
+      reply.send("OK");
     } catch (error) {
-      errors.push("Database is not operational");
-    }
+      console.log(error);
 
-    try {
-      await redis.ping();
-    } catch (error) {
-      errors.push("Redis is not operational");
+      server.log.error("healthcheck ❌");
+      return reply.status(500).send("ERROR");
     }
-
-    try {
-      if (nc.isClosed()) {
-        errors.push("NATS connection is closed");
-      }
-    } catch (error) {
-      errors.push("NATS is not operational");
-    }
-
-    if (errors.length > 0) {
-      return reply.status(500).send({
-        errors,
-      });
-    }
-
-    reply.send("OK");
   });
 }
