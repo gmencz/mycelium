@@ -11,6 +11,7 @@ const (
 	typeUnsubscribeError   messageType = "unsubscribe_error"
 	typeSubscribeSuccess   messageType = "subscribe_success"
 	typeUnsubscribeSuccess messageType = "unsubscribe_success"
+	typePublishError       messageType = "publish_error"
 )
 
 type message struct {
@@ -43,6 +44,17 @@ type unsubscribeSuccessMessage struct {
 	Channel string `json:"channel"`
 }
 
+type publishMessage struct {
+	Channel string      `json:"channel"`
+	Data    interface{} `json:"data"`
+}
+
+type publishMessageData struct {
+	IncludePublisher bool        `json:"include_publisher"`
+	Channel          string      `json:"channel"`
+	Data             interface{} `json:"data"`
+}
+
 func newHelloMessage(sessionID string) *message {
 	return &message{
 		Type: typeHello,
@@ -64,8 +76,18 @@ func newSubscribeSuccessMessage(channel string) *message {
 func newUnsubscribeSuccessMessage(channel string) *message {
 	return &message{
 		Type: typeUnsubscribeSuccess,
-		Data: &unsubscribeMessageData{
+		Data: &unsubscribeSuccessMessage{
 			Channel: channel,
+		},
+	}
+}
+
+func newPublishMessage(channel string, data interface{}) *message {
+	return &message{
+		Type: typePublish,
+		Data: &publishMessage{
+			Channel: channel,
+			Data:    data,
 		},
 	}
 }

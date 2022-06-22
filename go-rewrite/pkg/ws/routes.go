@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v9"
 	"github.com/gorilla/websocket"
+	"github.com/nats-io/nats.go"
 	logger "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -18,10 +19,7 @@ var upgrader = websocket.Upgrader{
 var ctx = context.Background()
 
 // RegisterRoutes sets up the WebSocket routes.
-func RegisterRoutes(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
-	hub := newHub()
-	go hub.run(rdb)
-
+func RegisterRoutes(router *gin.Engine, db *gorm.DB, rdb *redis.Client, nc *nats.EncodedConn, hub *Hub) {
 	router.GET("/ws", func(ctx *gin.Context) {
 		ws, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 		if err != nil {
@@ -31,13 +29,13 @@ func RegisterRoutes(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 
 		client, closeMessage := newClient(ctx.Request, ws, db, hub)
 		if closeMessage != nil {
-			closeWithMessage(ws, closeMessage)
+			CloseWithMessage(ws, closeMessage)
 			return
 		}
 
 		client.startSession()
 
 		go client.ping()
-		go client.readMessages(rdb)
+		go client.readMessages(rdb, nc)
 	})
 }

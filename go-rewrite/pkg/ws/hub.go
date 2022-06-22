@@ -1,20 +1,24 @@
 package ws
 
 import (
+	"strings"
+	"time"
+
 	"github.com/gmencz/mycelium/pkg/common"
 	"github.com/go-redis/redis/v9"
+	"github.com/nats-io/nats.go"
 )
 
-// hub maintains the set of active clients.
-type hub struct {
+// Hub maintains the set of active clients and manages subscriptions.
+type Hub struct {
 	// Registered clients.
-	clients map[*client]bool
+	clients map[*Client]bool
 
 	// Register a client.
-	register chan *client
+	register chan *Client
 
 	// Unregister a client.
-	unregister chan *client
+	unregister chan *Client
 
 	// Subscribe to a channel
 	subscribe chan *hubSubscription
@@ -23,36 +27,75 @@ type hub struct {
 	unsubscribe chan *hubUnsubscription
 
 	// The channels and clients subscribed to them.
-	channelsClients map[string][]*client
+	ChannelsClients map[string][]*Client
 
 	// The clients and channels they're subscribed to.
-	clientsChannels map[*client][]string
+	ClientsChannels map[*Client][]string
 }
 
 type hubSubscription struct {
-	client  *client
+	client  *Client
 	channel string
 }
 
 type hubUnsubscription struct {
-	client  *client
+	client  *Client
 	channel string
 }
 
-func newHub() *hub {
-	return &hub{
-		register:        make(chan *client),
-		unregister:      make(chan *client),
-		clients:         make(map[*client]bool),
+type natsChannelPublishData struct {
+	Channel     string      `json:"channel"`
+	Data        interface{} `json:"data"`
+	PublisherID string      `json:"publisher_id"`
+}
+
+func NewHub() *Hub {
+	return &Hub{
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		clients:         make(map[*Client]bool),
 		subscribe:       make(chan *hubSubscription),
 		unsubscribe:     make(chan *hubUnsubscription),
-		channelsClients: make(map[string][]*client),
-		clientsChannels: make(map[*client][]string),
+		ChannelsClients: make(map[string][]*Client),
+		ClientsChannels: make(map[*Client][]string),
 	}
 }
 
-func (h *hub) run(rdb *redis.Client) {
+func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 	// rdb.FlushDB(ctx)
+
+	nc.Subscribe("channel_publish", func(data *natsChannelPublishData) {
+		clients, ok := h.ChannelsClients[data.Channel]
+		if !ok {
+			return
+		}
+
+		// Channel parts: <app-id>:<channel-name>
+		channelParts := strings.Split(data.Channel, ":")
+		if len(channelParts) != 2 {
+			return
+		}
+		channelName := channelParts[1]
+
+		// If there's no publisherID, publish message to every subscriber of the channel.
+		if data.PublisherID == "" {
+			for _, c := range clients {
+				c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
+				c.Ws.WriteJSON(newPublishMessage(channelName, data.Data))
+			}
+
+			return
+		}
+
+		// If we're here, there's a publisherID which means we need to exclude the client with
+		// that id (the client could be on this server or not but we still need to check).
+		for _, c := range clients {
+			if c.sessionID != data.PublisherID {
+				c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
+				c.Ws.WriteJSON(newPublishMessage(channelName, data.Data))
+			}
+		}
+	})
 
 	for {
 		select {
@@ -73,18 +116,18 @@ func (h *hub) run(rdb *redis.Client) {
 					}
 				}
 
-				h.channelsClients[channel] = common.Filter(h.channelsClients[channel], func(cl *client) bool {
+				h.ChannelsClients[channel] = common.Filter(h.ChannelsClients[channel], func(cl *Client) bool {
 					return cl.sessionID != c.sessionID
 				})
 			}
 
-			delete(h.clientsChannels, c)
+			delete(h.ClientsChannels, c)
 
 		case subscription := <-h.subscribe:
-			h.channelsClients[subscription.channel] = append(h.channelsClients[subscription.channel], subscription.client)
+			h.ChannelsClients[subscription.channel] = append(h.ChannelsClients[subscription.channel], subscription.client)
 
 		case unsubscription := <-h.unsubscribe:
-			h.channelsClients[unsubscription.channel] = common.Filter(h.channelsClients[unsubscription.channel], func(client *client) bool {
+			h.ChannelsClients[unsubscription.channel] = common.Filter(h.ChannelsClients[unsubscription.channel], func(client *Client) bool {
 				return client.sessionID != unsubscription.client.sessionID
 			})
 		}

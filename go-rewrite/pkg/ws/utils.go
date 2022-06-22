@@ -15,7 +15,7 @@ const (
 	closeGracePeriod = 10 * time.Second
 )
 
-func closeWithMessage(ws *websocket.Conn, data []byte) {
+func CloseWithMessage(ws *websocket.Conn, data []byte) {
 	ws.SetWriteDeadline(time.Now().Add(writeWait))
 	ws.WriteMessage(websocket.CloseMessage, data)
 	time.Sleep(closeGracePeriod)
