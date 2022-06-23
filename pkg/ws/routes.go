@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v9"
+	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/nats.go"
 	logger "github.com/sirupsen/logrus"

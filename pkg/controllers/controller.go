@@ -1,7 +1,7 @@
 package controllers
 
 import (
-	"github.com/go-redis/redis/v9"
+	"github.com/go-redis/redis/v8"
 	"gorm.io/gorm"
 )
 

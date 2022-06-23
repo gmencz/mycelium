@@ -10,7 +10,7 @@ import (
 
 	"github.com/gmencz/mycelium/pkg/common"
 	"github.com/gmencz/mycelium/pkg/models"
-	"github.com/go-redis/redis/v9"
+	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"

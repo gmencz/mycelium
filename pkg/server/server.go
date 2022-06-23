@@ -11,7 +11,7 @@ import (
 	"github.com/gmencz/mycelium/pkg/controllers"
 	"github.com/gmencz/mycelium/pkg/db"
 	"github.com/gmencz/mycelium/pkg/ws"
-	"github.com/go-redis/redis/v9"
+	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/nats.go"
 	"github.com/sirupsen/logrus"
@@ -54,6 +54,7 @@ func NewServer() *Server {
 		Addr:     RedisAddress,
 		Password: RedisPassword,
 		DB:       0, // use default DB
+		Username: "default",
 	})
 
 	// Routes

@@ -1,35 +1,33 @@
-app = "mycelium-staging"
+# fly.toml file generated for mycelium on 2022-06-23T18:10:59+02:00
 
+app = "mycelium"
 kill_signal = "SIGINT"
 kill_timeout = 5
 processes = []
 
 [env]
-  PORT = "8080"
-  NODE_ENV = "production"
-
-[deploy]
-  release_command = "npx prisma migrate deploy"
+  GIN_MODE="release"
+  PORT=8080
 
 [experimental]
   allowed_public_ports = []
   auto_rollback = true
 
 [[services]]
+  http_checks = []
   internal_port = 8080
   processes = ["app"]
   protocol = "tcp"
   script_checks = []
-
   [services.concurrency]
-    hard_limit = 500
-    soft_limit = 475
+    hard_limit = 1000
+    soft_limit = 975
     type = "connections"
 
   [[services.ports]]
+    force_https = true
     handlers = ["http"]
     port = 80
-    force_https = true
 
   [[services.ports]]
     handlers = ["tls", "http"]
@@ -40,13 +38,3 @@ processes = []
     interval = "15s"
     restart_limit = 0
     timeout = "2s"
-
-  [[services.http_checks]]
-    interval = "10s"
-    grace_period = "5s"
-    method = "get"
-    path = "/health"
-    protocol = "http"
-    timeout = "2s"
-    tls_skip_verify = false
-    [services.http_checks.headers]

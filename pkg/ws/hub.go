@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gmencz/mycelium/pkg/common"
-	"github.com/go-redis/redis/v9"
+	"github.com/go-redis/redis/v8"
 	"github.com/nats-io/nats.go"
 )
 
