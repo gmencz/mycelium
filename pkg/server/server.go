@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gmencz/mycelium/pkg/controllers"
 	"github.com/gmencz/mycelium/pkg/db"
+	"github.com/gmencz/mycelium/pkg/middlewares"
 	"github.com/gmencz/mycelium/pkg/ws"
 	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
@@ -56,6 +57,14 @@ func NewServer() *Server {
 		DB:       0, // use default DB
 		Username: "default",
 	})
+
+	rateLimiterMiddleware, rateLimiterMiddlewareErr := middlewares.NewRateLimiterMiddleware("15000-H", rdb)
+	if rateLimiterMiddlewareErr != nil {
+		logrus.Fatalln(rateLimiterMiddlewareErr)
+	}
+
+	// Middlewares
+	router.Use(rateLimiterMiddleware)
 
 	// Routes
 	ws.RegisterRoutes(router, database, rdb, c, wsHub)
