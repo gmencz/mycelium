@@ -125,7 +125,6 @@ func newClient(request *http.Request, ws *websocket.Conn, db *gorm.DB, hub *Hub)
 	}, nil
 }
 
-// startSession starts a new session.
 func (c *Client) startSession() {
 	c.hub.register <- c
 	c.Ws.SetReadLimit(maxMessageSize)
@@ -243,8 +242,8 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	if err != nil {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
 		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeSubscribeError,
-			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", typeSubscribe),
+			Type:   typeUnsubscribeError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", typeUnsubscribe),
 		})
 
 		return
@@ -254,8 +253,8 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	if err := json.Unmarshal(jsonData, &d); err != nil {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
 		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeSubscribeError,
-			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", typeSubscribe),
+			Type:   typeUnsubscribeError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", typeUnsubscribe),
 		})
 
 		return
@@ -276,7 +275,7 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	if !isSubscribed {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
 		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeSubscribeError,
+			Type:   typeUnsubscribeError,
 			Reason: fmt.Sprintf("you're not subscribed to the channel %s", d.Channel),
 		})
 

@@ -49,6 +49,7 @@ type natsChannelPublishData struct {
 	PublisherID string      `json:"publisher_id"`
 }
 
+// NewHub returns an initialized Hub.
 func NewHub() *Hub {
 	return &Hub{
 		register:        make(chan *Client),
@@ -61,9 +62,8 @@ func NewHub() *Hub {
 	}
 }
 
+// Run runs the Hub.
 func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
-	// rdb.FlushDB(ctx)
-
 	nc.Subscribe("channel_publish", func(data *natsChannelPublishData) {
 		clients, ok := h.ChannelsClients[data.Channel]
 		if !ok {
