@@ -1,13 +1,13 @@
-# fly.toml file generated for mycelium on 2022-06-23T18:10:59+02:00
+# fly.toml file generated for mycelium-server on 2022-06-24T23:09:02+02:00
 
-app = "mycelium"
+app = "mycelium-server"
 kill_signal = "SIGINT"
 kill_timeout = 5
 processes = []
 
 [env]
-  GIN_MODE="release"
-  PORT=8080
+  GIN_MODE = "release"
+  PORT = 8080
 
 [experimental]
   allowed_public_ports = []
