@@ -2,6 +2,7 @@ package common
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 )
 
@@ -47,4 +48,14 @@ func RemoveDuplicateStrings(strings []string) []string {
 		}
 	}
 	return list
+}
+
+func ValidateString(s string) bool {
+	match, _ := regexp.MatchString("^[a-zA-Z0-9_-]+$", s)
+	sLen := len(s)
+	if match && sLen >= 1 && sLen <= 255 {
+		return true
+	}
+
+	return false
 }

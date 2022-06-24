@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"regexp"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -20,14 +19,4 @@ func CloseWithMessage(ws *websocket.Conn, data []byte) {
 	ws.WriteMessage(websocket.CloseMessage, data)
 	time.Sleep(closeGracePeriod)
 	ws.Close()
-}
-
-func validateChannelName(channel string) bool {
-	match, _ := regexp.MatchString("^[a-zA-Z0-9_-]+$", channel)
-	channelLen := len(channel)
-	if match && channelLen >= 1 && channelLen <= 255 {
-		return true
-	}
-
-	return false
 }

@@ -64,7 +64,21 @@ func newClient(request *http.Request, ws *websocket.Conn, db *gorm.DB, hub *Hub)
 	var apiKey models.ApiKey
 
 	if key != "" {
-		if result := db.First(&apiKey, "id = ?", key); result.Error != nil {
+		// Key format: <api-key-id:api-key-secret>. This authentication method should only be used in trusted environments like in
+		// server side WebSockets.
+		keyParts := strings.Split(key, ":")
+		if len(keyParts) != 2 {
+			return nil, websocket.FormatCloseMessage(4001, "invalid key")
+		}
+
+		apiKeyID := keyParts[0]
+		apiKeySecret := keyParts[1]
+
+		if result := db.First(&apiKey, "id = ?", apiKeyID); result.Error != nil {
+			return nil, websocket.FormatCloseMessage(4001, "invalid key")
+		}
+
+		if apiKey.Secret != apiKeySecret {
 			return nil, websocket.FormatCloseMessage(4001, "invalid key")
 		}
 
@@ -194,7 +208,7 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	}
 
 	appChannel := c.appID + ":" + d.Channel
-	if !validateChannelName(d.Channel) {
+	if !common.ValidateString(d.Channel) {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
 		c.Ws.WriteJSON(&errorMessage{
 			Type:   typeSubscribeError,
@@ -266,7 +280,7 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	}
 
 	appChannel := c.appID + ":" + d.Channel
-	if !validateChannelName(d.Channel) {
+	if !common.ValidateString(d.Channel) {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
 		c.Ws.WriteJSON(&errorMessage{
 			Type:   typeUnsubscribeError,
