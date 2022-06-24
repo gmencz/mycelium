@@ -7,6 +7,7 @@ import (
 	"github.com/gmencz/mycelium/pkg/common"
 	"github.com/go-redis/redis/v8"
 	"github.com/nats-io/nats.go"
+	"github.com/sirupsen/logrus"
 )
 
 // Hub maintains the set of active clients and manages subscriptions.
@@ -101,6 +102,7 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 		select {
 		case client := <-h.register:
 			h.clients[client] = true
+			logrus.Info("new client registered, updated number of clients: ", len(h.clients))
 
 		case c := <-h.unregister:
 			delete(h.clients, c)
@@ -122,6 +124,7 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 			}
 
 			delete(h.ClientsChannels, c)
+			logrus.Info("client unregistered, updated number of clients: ", len(h.clients))
 
 		case subscription := <-h.subscribe:
 			h.ChannelsClients[subscription.channel] = append(h.ChannelsClients[subscription.channel], subscription.client)

@@ -41,6 +41,6 @@ func RegisterRoutes(router *gin.Engine, db *gorm.DB, rdb *redis.Client, nc *nats
 		client.startSession()
 
 		go client.ping()
-		go client.readMessages(rdb, nc)
+		client.readMessages(rdb, nc)
 	})
 }
