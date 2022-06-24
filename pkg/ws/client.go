@@ -20,13 +20,14 @@ import (
 )
 
 type Client struct {
-	hub          *Hub
-	sessionID    string
-	Ws           *websocket.Conn
-	apiKeyID     string
-	appID        string
-	capabilities map[string]string
-	channels     []string
+	hub                    *Hub
+	sessionID              string
+	Ws                     *websocket.Conn
+	apiKeyID               string
+	appID                  string
+	capabilities           map[string]string
+	channels               []string
+	messagesSentLastSecond int
 }
 
 const (
@@ -41,6 +42,9 @@ const (
 
 	// Maximum channels a client can subscribe to
 	maxChannels = 500
+
+	// Maximum messages a client can send per second
+	maxMessagesPerSecond = 10
 )
 
 // newClient tries to authenticate the connection and returns a new client if successful.
@@ -115,13 +119,14 @@ func newClient(request *http.Request, ws *websocket.Conn, db *gorm.DB, hub *Hub)
 	}
 
 	return &Client{
-		sessionID:    uuid.NewString(),
-		Ws:           ws,
-		apiKeyID:     apiKey.ID,
-		appID:        apiKey.AppID,
-		capabilities: capabilities,
-		hub:          hub,
-		channels:     make([]string, 0),
+		sessionID:              uuid.NewString(),
+		Ws:                     ws,
+		apiKeyID:               apiKey.ID,
+		appID:                  apiKey.AppID,
+		capabilities:           capabilities,
+		hub:                    hub,
+		channels:               make([]string, 0),
+		messagesSentLastSecond: 0,
 	}, nil
 }
 
@@ -356,8 +361,16 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn) {
 }
 
 func (c *Client) readMessages(rdb *redis.Client, nc *nats.EncodedConn) {
+	messagesSentLastSecondTicker := time.NewTicker(time.Second)
+	go func() {
+		for range messagesSentLastSecondTicker.C {
+			c.messagesSentLastSecond = 0
+		}
+	}()
+
 	defer func() {
 		c.hub.unregister <- c
+		messagesSentLastSecondTicker.Stop()
 		c.Ws.Close()
 	}()
 
@@ -367,9 +380,16 @@ func (c *Client) readMessages(rdb *redis.Client, nc *nats.EncodedConn) {
 			break
 		}
 
+		if c.messagesSentLastSecond >= maxMessagesPerSecond {
+			CloseWithMessage(c.Ws, websocket.FormatCloseMessage(4029, "too many messages"))
+			break
+		}
+
+		c.messagesSentLastSecond++
 		var payload message
 		unmarshalErr := json.Unmarshal(msg, &payload)
 		if unmarshalErr != nil {
+			CloseWithMessage(c.Ws, websocket.FormatCloseMessage(4010, "invalid message"))
 			break
 		}
 

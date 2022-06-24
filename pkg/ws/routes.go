@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -14,6 +15,10 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	CheckOrigin: func(*http.Request) bool {
+		// Allow all origins.
+		return true
+	},
 }
 
 var ctx = context.Background()
