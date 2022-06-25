@@ -8,6 +8,12 @@ async function main() {
     data: {
       id: nanoid(),
       name: "My App 1",
+      user: {
+        create: {
+          id: nanoid(),
+          email: "yo@gabrielmendezc.com",
+        },
+      },
       apiKeys: {
         create: {
           id: nanoid(),
