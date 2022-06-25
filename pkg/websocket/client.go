@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gmencz/mycelium/pkg/common"
@@ -16,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/nats.go"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 	"gorm.io/gorm"
 )
@@ -25,10 +27,11 @@ type Client struct {
 	sessionID              string
 	Ws                     *websocket.Conn
 	apiKeyID               string
-	appID                  string
+	AppID                  string
 	capabilities           map[string]string
 	channels               []string
 	messagesSentLastSecond int
+	mu                     sync.Mutex
 }
 
 const (
@@ -137,7 +140,7 @@ func NewClient(request *http.Request, ws *websocket.Conn, db *gorm.DB, hub *Hub)
 		sessionID:              uuid.NewString(),
 		Ws:                     ws,
 		apiKeyID:               apiKey.ID,
-		appID:                  apiKey.AppID,
+		AppID:                  apiKey.AppID,
 		capabilities:           capabilities,
 		hub:                    hub,
 		channels:               make([]string, 0),
@@ -145,13 +148,62 @@ func NewClient(request *http.Request, ws *websocket.Conn, db *gorm.DB, hub *Hub)
 	}, nil
 }
 
-func (c *Client) StartSession() {
+// Tracks the client in redis, this is used to calculate pricing and analytics.
+func (c *Client) track(rdb *redis.Client) (closeMessage []byte) {
+	currentClientsKey := "current-clients:" + c.AppID
+	currentClientsResult := rdb.Incr(ctx, currentClientsKey)
+	if currentClientsResult.Err() != nil {
+		return websocket.FormatCloseMessage(4500, "internal server error")
+	}
+	currentClients := currentClientsResult.Val()
+
+	// Peak clients for this month.
+	year, month, _ := time.Now().UTC().Date()
+	peakClientsKey := fmt.Sprintf("peak-clients:%s:%d-%d", c.AppID, month, year)
+	peakClientsExists := rdb.Exists(ctx, peakClientsKey)
+	if peakClientsExists.Err() != nil {
+		return websocket.FormatCloseMessage(4500, "internal server error")
+	}
+
+	// If it doesn't exist
+	if peakClientsExists.Val() <= 0 {
+		if setPeakClientsResult := rdb.Set(ctx, peakClientsKey, currentClients, 0); setPeakClientsResult.Err() != nil {
+			return websocket.FormatCloseMessage(4500, "internal server error")
+		}
+	} else {
+		peakClientsResult := rdb.Get(ctx, peakClientsKey)
+		if peakClientsResult.Err() != nil {
+			return websocket.FormatCloseMessage(4500, "internal server error")
+		}
+
+		peakClients, peakClientsErr := peakClientsResult.Int64()
+		if peakClientsErr != nil {
+			return websocket.FormatCloseMessage(4500, "internal server error")
+		}
+
+		if currentClients > peakClients {
+			if setPeakClientsResult := rdb.Set(ctx, peakClientsKey, currentClients, 0); setPeakClientsResult.Err() != nil {
+				return websocket.FormatCloseMessage(4500, "internal server error")
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) StartSession(rdb *redis.Client) {
 	c.hub.register <- c
+
+	closeMessage := c.track(rdb)
+	if closeMessage != nil {
+		CloseWithMessage(c.Ws, closeMessage)
+		return
+	}
+
 	c.Ws.SetReadLimit(maxMessageSize)
 	c.Ws.SetReadDeadline(time.Now().Add(pongWait))
 	c.Ws.SetPongHandler(func(string) error { c.Ws.SetReadDeadline(time.Now().Add(pongWait)); return nil })
-	c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-	c.Ws.WriteJSON(protocol.NewHelloMessage(&protocol.HelloMessageData{SessionID: c.sessionID}))
+	c.WriteJSON(protocol.NewHelloMessage(&protocol.HelloMessageData{SessionID: c.sessionID}))
 }
 
 func (c *Client) Ping() {
@@ -164,8 +216,7 @@ func (c *Client) Ping() {
 	}()
 
 	for range ticker.C {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteMessage(websocket.PingMessage, nil)
+		c.Write(websocket.PingMessage, nil)
 	}
 }
 
@@ -188,8 +239,7 @@ func (c *Client) hasCapability(capability string, channel string, capabilities m
 func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypeSubscribeError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeSubscribe),
 		})
@@ -199,8 +249,7 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 
 	d := protocol.SubscribeMessageData{}
 	if err := json.Unmarshal(jsonData, &d); err != nil {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypeSubscribeError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeSubscribe),
 		})
@@ -208,10 +257,9 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 		return
 	}
 
-	appChannel := c.appID + ":" + d.Channel
+	appChannel := c.AppID + ":" + d.Channel
 	if !common.ValidateString(d.Channel) {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypeSubscribeError,
 			Reason: fmt.Sprintf("invalid 'channel' for mesage of type '%v'", protocol.MessageTypeSubscribe),
 		})
@@ -221,8 +269,7 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 
 	isAlreadySubscribed := slices.Contains(c.channels, appChannel)
 	if isAlreadySubscribed {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypeSubscribeError,
 			Reason: fmt.Sprintf("you're already subscribed to the channel %s", d.Channel),
 		})
@@ -231,8 +278,7 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	}
 
 	if len(c.channels) > maxChannels {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypeSubscribeError,
 			Reason: fmt.Sprintf("you can't subscribe to more than %v channels", maxChannels),
 		})
@@ -241,8 +287,7 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	}
 
 	if !c.hasCapability(string(protocol.MessageTypeSubscribe), d.Channel, c.capabilities) {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypeSubscribeError,
 			Reason: fmt.Sprintf("you're not allowed to subscribe to the channel %s", d.Channel),
 		})
@@ -253,15 +298,13 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	c.channels = append(c.channels, appChannel)
 	c.hub.subscribe <- &hubSubscription{client: c, channel: appChannel}
 	rdb.Incr(ctx, "subscribers:"+appChannel)
-	c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-	c.Ws.WriteJSON(protocol.NewSubscribeSuccessMessage(&protocol.SubscribeSuccessMessageData{Channel: d.Channel}))
+	c.WriteJSON(protocol.NewSubscribeSuccessMessage(&protocol.SubscribeSuccessMessageData{Channel: d.Channel}))
 }
 
 func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypeUnsubscribeError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeUnsubscribe),
 		})
@@ -271,8 +314,7 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 
 	d := protocol.UnsubscribeMessageData{}
 	if err := json.Unmarshal(jsonData, &d); err != nil {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypeUnsubscribeError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeUnsubscribe),
 		})
@@ -280,10 +322,9 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 		return
 	}
 
-	appChannel := c.appID + ":" + d.Channel
+	appChannel := c.AppID + ":" + d.Channel
 	if !common.ValidateString(d.Channel) {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypeUnsubscribeError,
 			Reason: fmt.Sprintf("invalid 'channel' for mesage of type '%v'", protocol.MessageTypeUnsubscribe),
 		})
@@ -293,8 +334,7 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 
 	isSubscribed := slices.Contains(c.channels, appChannel)
 	if !isSubscribed {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypeUnsubscribeError,
 			Reason: fmt.Sprintf("you're not subscribed to the channel %s", d.Channel),
 		})
@@ -310,19 +350,17 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	key := "subscribers:" + appChannel
 	i := rdb.Decr(ctx, key)
 	subscribersLeft := i.Val()
-	if subscribersLeft == 0 {
+	if subscribersLeft <= 0 {
 		rdb.Del(ctx, key)
 	}
 
-	c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-	c.Ws.WriteJSON(protocol.NewUnsubscribeSuccessMessage(&protocol.UnsubscribeSuccessMessageData{Channel: d.Channel}))
+	c.WriteJSON(protocol.NewUnsubscribeSuccessMessage(&protocol.UnsubscribeSuccessMessageData{Channel: d.Channel}))
 }
 
-func (c *Client) publish(data interface{}, nc *nats.EncodedConn) {
+func (c *Client) publish(data interface{}, nc *nats.EncodedConn, rdb *redis.Client) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypePublishError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypePublish),
 		})
@@ -332,8 +370,7 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn) {
 
 	d := protocol.PublishMessageDataData{}
 	if err := json.Unmarshal(jsonData, &d); err != nil {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypePublishError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypePublish),
 		})
@@ -341,11 +378,10 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn) {
 		return
 	}
 
-	appChannel := c.appID + ":" + d.Channel
+	appChannel := c.AppID + ":" + d.Channel
 	isSubscribed := slices.Contains(c.channels, appChannel)
 	if !isSubscribed {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypePublishError,
 			Reason: fmt.Sprintf("you're not subscribed to the channel %s", d.Channel),
 		})
@@ -354,8 +390,7 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn) {
 	}
 
 	if !c.hasCapability(string(protocol.MessageTypePublish), d.Channel, c.capabilities) {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypePublishError,
 			Reason: fmt.Sprintf("you're not allowed to publish messages on the channel %s", d.Channel),
 		})
@@ -375,8 +410,7 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn) {
 	})
 
 	if publishErr != nil {
-		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&protocol.ErrorMessage{
+		c.WriteJSON(&protocol.ErrorMessage{
 			Type:   protocol.MessageTypePublishError,
 			Reason: "internal server error publishing message",
 		})
@@ -384,8 +418,35 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn) {
 		return
 	}
 
+	// Published messages in a month (for pricing and analytics).
+	year, month, _ := time.Now().UTC().Date()
+	publishedMessagesKey := fmt.Sprintf("published-messages:%s:%d-%d", c.AppID, month, year)
+	incr := rdb.Incr(ctx, publishedMessagesKey)
+	if incr.Err() != nil {
+		logrus.Error(fmt.Sprintf("failed to track published message at key %s", publishedMessagesKey))
+	}
+
+	c.WriteJSON(protocol.NewPublishSuccessMessage(&protocol.PublishSuccessMessageData{Channel: d.Channel}))
+}
+
+func (c *Client) WriteJSON(v interface{}) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-	c.Ws.WriteJSON(protocol.NewPublishSuccessMessage(&protocol.PublishSuccessMessageData{Channel: d.Channel}))
+	return c.Ws.WriteJSON(v)
+}
+
+func (c *Client) Write(messageType int, data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
+	return c.Ws.WriteMessage(messageType, data)
+}
+
+func (c *Client) CloseWithMessage(data []byte) {
+	c.Write(websocket.CloseMessage, data)
+	time.Sleep(closeGracePeriod)
+	c.Ws.Close()
 }
 
 func (c *Client) ReadMessages(rdb *redis.Client, nc *nats.EncodedConn) {
@@ -408,8 +469,8 @@ func (c *Client) ReadMessages(rdb *redis.Client, nc *nats.EncodedConn) {
 			break
 		}
 
-		if c.messagesSentLastSecond >= maxMessagesPerSecond {
-			CloseWithMessage(c.Ws, websocket.FormatCloseMessage(4029, "too many messages"))
+		if c.messagesSentLastSecond >= (maxMessagesPerSecond - 1) {
+			c.CloseWithMessage(websocket.FormatCloseMessage(4029, "too many messages"))
 			break
 		}
 
@@ -417,7 +478,7 @@ func (c *Client) ReadMessages(rdb *redis.Client, nc *nats.EncodedConn) {
 		var message protocol.Message
 		unmarshalErr := json.Unmarshal(bytes, &message)
 		if unmarshalErr != nil {
-			CloseWithMessage(c.Ws, websocket.FormatCloseMessage(4010, "invalid message"))
+			c.CloseWithMessage(websocket.FormatCloseMessage(4010, "invalid message"))
 			break
 		}
 
@@ -429,7 +490,7 @@ func (c *Client) ReadMessages(rdb *redis.Client, nc *nats.EncodedConn) {
 			c.unsubscribe(message.Data, rdb)
 
 		case protocol.MessageTypePublish:
-			c.publish(message.Data, nc)
+			c.publish(message.Data, nc, rdb)
 		}
 	}
 }

@@ -19,10 +19,10 @@ import (
 )
 
 var (
-	Port          = os.Getenv("PORT")
-	NatsHost      = os.Getenv("NATS_HOST")
-	RedisAddress  = os.Getenv("REDIS_ADDRESS")
-	RedisPassword = os.Getenv("REDIS_PASSWORD")
+	port          = os.Getenv("PORT")
+	natsHost      = os.Getenv("NATS_HOST")
+	redisAddress  = os.Getenv("REDIS_ADDRESS")
+	redisPassword = os.Getenv("REDIS_PASSWORD")
 )
 
 type Server struct {
@@ -41,7 +41,7 @@ func NewServer() *Server {
 	// Dependencies
 	wsHub := websocket.NewHub()
 	database := db.NewDB()
-	nc, ncErr := nats.Connect(NatsHost)
+	nc, ncErr := nats.Connect(natsHost)
 	if ncErr != nil {
 		logrus.Fatalln(ncErr)
 	}
@@ -52,8 +52,8 @@ func NewServer() *Server {
 	}
 
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     RedisAddress,
-		Password: RedisPassword,
+		Addr:     redisAddress,
+		Password: redisPassword,
 		DB:       0, // use default DB
 		Username: "default",
 	})
@@ -115,7 +115,7 @@ func (s *Server) Start() (err error) {
 	go s.wsHub.Run(s.rdb, s.nc)
 	go s.listenTerminationSignals()
 
-	return s.router.Run(":" + Port)
+	return s.router.Run(":" + port)
 }
 
 var ctx = context.Background()
@@ -131,7 +131,7 @@ func (s *Server) Shutdown() {
 	}()
 
 	for client := range s.wsHub.ClientsChannels {
-		websocket.CloseWithMessage(client.Ws, wsLib.FormatCloseMessage(4009, "please reconnect"))
+		client.CloseWithMessage(wsLib.FormatCloseMessage(4009, "please reconnect"))
 	}
 
 	for channel := range s.wsHub.ChannelsClients {
@@ -139,7 +139,25 @@ func (s *Server) Shutdown() {
 		decrBy := len(s.wsHub.ChannelsClients[channel])
 		i := s.rdb.DecrBy(ctx, key, int64(decrBy))
 		subscribersLeft := i.Val()
-		if subscribersLeft == 0 {
+		if subscribersLeft <= 0 {
+			s.rdb.Del(ctx, key)
+		}
+	}
+
+	appsDecrements := make(map[string]int64)
+	for client := range s.wsHub.Clients {
+		currentDecrements, exists := appsDecrements[client.AppID]
+		if exists {
+			appsDecrements[client.AppID] = currentDecrements + 1
+		} else {
+			appsDecrements[client.AppID] = 1
+		}
+	}
+
+	for appID, decrBy := range appsDecrements {
+		key := "current-clients:" + appID
+		clientsLeft := s.rdb.DecrBy(ctx, key, decrBy)
+		if clientsLeft.Val() <= 0 {
 			s.rdb.Del(ctx, key)
 		}
 	}

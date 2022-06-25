@@ -3,7 +3,6 @@ package websocket
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/gmencz/mycelium/pkg/common"
 	"github.com/gmencz/mycelium/pkg/protocol"
@@ -17,7 +16,7 @@ var ctx = context.Background()
 // Hub maintains all the state related to active clients.
 type Hub struct {
 	// Registered clients.
-	clients map[*Client]bool
+	Clients map[*Client]bool
 
 	// Register a client.
 	register chan *Client
@@ -59,7 +58,7 @@ func NewHub() *Hub {
 	return &Hub{
 		register:        make(chan *Client),
 		unregister:      make(chan *Client),
-		clients:         make(map[*Client]bool),
+		Clients:         make(map[*Client]bool),
 		subscribe:       make(chan *hubSubscription),
 		unsubscribe:     make(chan *hubUnsubscription),
 		ChannelsClients: make(map[string][]*Client),
@@ -87,8 +86,7 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 		// If there's no publisherID, publish message to every subscriber of the channel.
 		if data.PublisherID == "" {
 			for _, c := range clients {
-				c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-				c.Ws.WriteJSON(message)
+				c.WriteJSON(message)
 			}
 
 			return
@@ -98,8 +96,7 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 		// that id (the client could be on this server or not but we still need to check).
 		for _, c := range clients {
 			if c.sessionID != data.PublisherID {
-				c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-				c.Ws.WriteJSON(message)
+				c.WriteJSON(message)
 			}
 		}
 	})
@@ -107,11 +104,11 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 	for {
 		select {
 		case client := <-h.register:
-			h.clients[client] = true
-			logrus.Info("new client registered, updated number of clients: ", len(h.clients))
+			h.Clients[client] = true
+			logrus.Info("new client registered, updated number of clients: ", len(h.Clients))
 
 		case c := <-h.unregister:
-			delete(h.clients, c)
+			delete(h.Clients, c)
 
 			for _, channel := range c.channels {
 				key := "subscribers:" + channel
@@ -119,7 +116,7 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 				if channelExists.Val() > 0 {
 					i := rdb.Decr(ctx, key)
 					subscribersLeft := i.Val()
-					if subscribersLeft == 0 {
+					if subscribersLeft <= 0 {
 						rdb.Del(ctx, key)
 					}
 				}
@@ -129,8 +126,14 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 				})
 			}
 
+			currentClientsKey := "current-clients:" + c.AppID
+			currentClientsDecr := rdb.Decr(ctx, currentClientsKey)
+			if currentClientsDecr.Val() <= 0 {
+				rdb.Del(ctx, currentClientsKey)
+			}
+
 			delete(h.ClientsChannels, c)
-			logrus.Info("client unregistered, updated number of clients: ", len(h.clients))
+			logrus.Info("client unregistered, updated number of clients: ", len(h.Clients))
 
 		case subscription := <-h.subscribe:
 			h.ChannelsClients[subscription.channel] = append(h.ChannelsClients[subscription.channel], subscription.client)

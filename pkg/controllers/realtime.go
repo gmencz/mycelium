@@ -34,7 +34,7 @@ func (c *Controller) Realtime(ctx *gin.Context, db *gorm.DB, rdb *redis.Client, 
 		return
 	}
 
-	client.StartSession()
+	client.StartSession(rdb)
 
 	go client.Ping()
 	client.ReadMessages(rdb, nc)
