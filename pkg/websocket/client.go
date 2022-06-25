@@ -86,12 +86,8 @@ func NewClient(request *http.Request, ws *websocket.Conn, db *gorm.DB, hub *Hub)
 			return nil, websocket.FormatCloseMessage(4001, "invalid key")
 		}
 
-		result, err := apiKey.Capabilities.MarshalJSON()
-		if err != nil {
-			return nil, websocket.FormatCloseMessage(4005, "internal server error")
-		}
-
-		if err := json.Unmarshal(result, &capabilities); err != nil {
+		if err := json.Unmarshal([]byte(apiKey.Capabilities), &capabilities); err != nil {
+			logrus.Info(err.Error())
 			return nil, websocket.FormatCloseMessage(4001, "invalid key capabilities")
 		}
 	} else {
@@ -120,12 +116,7 @@ func NewClient(request *http.Request, ws *websocket.Conn, db *gorm.DB, hub *Hub)
 			}
 
 			if jwtCapabilities == nil {
-				result, err := apiKey.Capabilities.MarshalJSON()
-				if err != nil {
-					return nil, websocket.FormatCloseMessage(4005, "server error")
-				}
-
-				if err := json.Unmarshal(result, &capabilities); err != nil {
+				if err := json.Unmarshal([]byte(apiKey.Capabilities), &capabilities); err != nil {
 					return nil, websocket.FormatCloseMessage(4001, "invalid key capabilities")
 				}
 			} else {
