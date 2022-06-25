@@ -11,9 +11,9 @@ import (
 	"github.com/gmencz/mycelium/pkg/controllers"
 	"github.com/gmencz/mycelium/pkg/db"
 	"github.com/gmencz/mycelium/pkg/middlewares"
-	"github.com/gmencz/mycelium/pkg/ws"
+	"github.com/gmencz/mycelium/pkg/websocket"
 	"github.com/go-redis/redis/v8"
-	"github.com/gorilla/websocket"
+	wsLib "github.com/gorilla/websocket"
 	"github.com/nats-io/nats.go"
 	"github.com/sirupsen/logrus"
 )
@@ -27,7 +27,7 @@ var (
 
 type Server struct {
 	router          *gin.Engine
-	wsHub           *ws.Hub
+	wsHub           *websocket.Hub
 	rdb             *redis.Client
 	nc              *nats.EncodedConn
 	shutdownSignals chan os.Signal
@@ -39,7 +39,7 @@ func NewServer() *Server {
 	router.SetTrustedProxies(nil)
 
 	// Dependencies
-	wsHub := ws.NewHub()
+	wsHub := websocket.NewHub()
 	database := db.NewDB()
 	nc, ncErr := nats.Connect(NatsHost)
 	if ncErr != nil {
@@ -67,16 +67,18 @@ func NewServer() *Server {
 	router.Use(rateLimiterMiddleware)
 
 	// Routes
-	ws.RegisterRoutes(router, database, rdb, c, wsHub)
+	controller := &controllers.Controller{
+		Rdb: rdb,
+		Db:  database,
+	}
+
+	router.GET("/realtime", func(ctx *gin.Context) {
+		controller.Realtime(ctx, database, rdb, c, wsHub)
+	})
 
 	// API:v1.0
 	v1 := router.Group("/api/v1/")
 	{
-		controller := &controllers.Controller{
-			Rdb: rdb,
-			Db:  database,
-		}
-
 		rHealth := v1.Group("health")
 		rHealth.GET("", controller.Health)
 		rHealth.GET("/live", controller.HealthLive)
@@ -129,7 +131,7 @@ func (s *Server) Shutdown() {
 	}()
 
 	for client := range s.wsHub.ClientsChannels {
-		ws.CloseWithMessage(client.Ws, websocket.FormatCloseMessage(4009, "please reconnect"))
+		websocket.CloseWithMessage(client.Ws, wsLib.FormatCloseMessage(4009, "please reconnect"))
 	}
 
 	for channel := range s.wsHub.ChannelsClients {

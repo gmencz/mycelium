@@ -1,4 +1,4 @@
-package ws
+package websocket
 
 import (
 	"encoding/json"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/gmencz/mycelium/pkg/common"
 	"github.com/gmencz/mycelium/pkg/models"
+	"github.com/gmencz/mycelium/pkg/protocol"
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
@@ -47,8 +48,8 @@ const (
 	maxMessagesPerSecond = 10
 )
 
-// newClient tries to authenticate the connection and returns a new client if successful.
-func newClient(request *http.Request, ws *websocket.Conn, db *gorm.DB, hub *Hub) (c *Client, closeMessage []byte) {
+// NewClient tries to authenticate the connection and returns a new client if successful.
+func NewClient(request *http.Request, ws *websocket.Conn, db *gorm.DB, hub *Hub) (c *Client, closeMessage []byte) {
 	key := request.URL.Query().Get("key")
 	token := request.URL.Query().Get("token")
 
@@ -144,16 +145,16 @@ func newClient(request *http.Request, ws *websocket.Conn, db *gorm.DB, hub *Hub)
 	}, nil
 }
 
-func (c *Client) startSession() {
+func (c *Client) StartSession() {
 	c.hub.register <- c
 	c.Ws.SetReadLimit(maxMessageSize)
 	c.Ws.SetReadDeadline(time.Now().Add(pongWait))
 	c.Ws.SetPongHandler(func(string) error { c.Ws.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-	c.Ws.WriteJSON(newHelloMessage(c.sessionID))
+	c.Ws.WriteJSON(protocol.NewHelloMessage(&protocol.HelloMessageData{SessionID: c.sessionID}))
 }
 
-func (c *Client) ping() {
+func (c *Client) Ping() {
 	ticker := time.NewTicker(pingPeriod)
 
 	defer func() {
@@ -188,20 +189,20 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeSubscribeError,
-			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", typeSubscribe),
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeSubscribeError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeSubscribe),
 		})
 
 		return
 	}
 
-	d := subscribeMessageData{}
+	d := protocol.SubscribeMessageData{}
 	if err := json.Unmarshal(jsonData, &d); err != nil {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeSubscribeError,
-			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", typeSubscribe),
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeSubscribeError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeSubscribe),
 		})
 
 		return
@@ -210,9 +211,9 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	appChannel := c.appID + ":" + d.Channel
 	if !common.ValidateString(d.Channel) {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeSubscribeError,
-			Reason: fmt.Sprintf("invalid 'channel' for mesage of type '%v'", typeSubscribe),
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeSubscribeError,
+			Reason: fmt.Sprintf("invalid 'channel' for mesage of type '%v'", protocol.MessageTypeSubscribe),
 		})
 
 		return
@@ -221,8 +222,8 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	isAlreadySubscribed := slices.Contains(c.channels, appChannel)
 	if isAlreadySubscribed {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeSubscribeError,
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeSubscribeError,
 			Reason: fmt.Sprintf("you're already subscribed to the channel %s", d.Channel),
 		})
 
@@ -231,18 +232,18 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 
 	if len(c.channels) > maxChannels {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeSubscribeError,
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeSubscribeError,
 			Reason: fmt.Sprintf("you can't subscribe to more than %v channels", maxChannels),
 		})
 
 		return
 	}
 
-	if !c.hasCapability(string(typeSubscribe), d.Channel, c.capabilities) {
+	if !c.hasCapability(string(protocol.MessageTypeSubscribe), d.Channel, c.capabilities) {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeSubscribeError,
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeSubscribeError,
 			Reason: fmt.Sprintf("you're not allowed to subscribe to the channel %s", d.Channel),
 		})
 
@@ -253,27 +254,27 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	c.hub.subscribe <- &hubSubscription{client: c, channel: appChannel}
 	rdb.Incr(ctx, "subscribers:"+appChannel)
 	c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-	c.Ws.WriteJSON(newSubscribeSuccessMessage(d.Channel))
+	c.Ws.WriteJSON(protocol.NewSubscribeSuccessMessage(&protocol.SubscribeSuccessMessageData{Channel: d.Channel}))
 }
 
 func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeUnsubscribeError,
-			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", typeUnsubscribe),
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeUnsubscribeError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeUnsubscribe),
 		})
 
 		return
 	}
 
-	d := unsubscribeMessageData{}
+	d := protocol.UnsubscribeMessageData{}
 	if err := json.Unmarshal(jsonData, &d); err != nil {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeUnsubscribeError,
-			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", typeUnsubscribe),
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeUnsubscribeError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeUnsubscribe),
 		})
 
 		return
@@ -282,9 +283,9 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	appChannel := c.appID + ":" + d.Channel
 	if !common.ValidateString(d.Channel) {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeUnsubscribeError,
-			Reason: fmt.Sprintf("invalid 'channel' for mesage of type '%v'", typeUnsubscribe),
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeUnsubscribeError,
+			Reason: fmt.Sprintf("invalid 'channel' for mesage of type '%v'", protocol.MessageTypeUnsubscribe),
 		})
 
 		return
@@ -293,8 +294,8 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	isSubscribed := slices.Contains(c.channels, appChannel)
 	if !isSubscribed {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typeUnsubscribeError,
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeUnsubscribeError,
 			Reason: fmt.Sprintf("you're not subscribed to the channel %s", d.Channel),
 		})
 
@@ -314,27 +315,27 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	}
 
 	c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-	c.Ws.WriteJSON(newUnsubscribeSuccessMessage(d.Channel))
+	c.Ws.WriteJSON(protocol.NewUnsubscribeSuccessMessage(&protocol.UnsubscribeSuccessMessageData{Channel: d.Channel}))
 }
 
 func (c *Client) publish(data interface{}, nc *nats.EncodedConn) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typePublishError,
-			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", typePublish),
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypePublishError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypePublish),
 		})
 
 		return
 	}
 
-	d := publishMessageData{}
+	d := protocol.PublishMessageDataData{}
 	if err := json.Unmarshal(jsonData, &d); err != nil {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typePublishError,
-			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", typeSubscribe),
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypePublishError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypePublish),
 		})
 
 		return
@@ -344,18 +345,18 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn) {
 	isSubscribed := slices.Contains(c.channels, appChannel)
 	if !isSubscribed {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typePublishError,
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypePublishError,
 			Reason: fmt.Sprintf("you're not subscribed to the channel %s", d.Channel),
 		})
 
 		return
 	}
 
-	if !c.hasCapability(string(typePublish), d.Channel, c.capabilities) {
+	if !c.hasCapability(string(protocol.MessageTypePublish), d.Channel, c.capabilities) {
 		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-		c.Ws.WriteJSON(&errorMessage{
-			Type:   typePublishError,
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypePublishError,
 			Reason: fmt.Sprintf("you're not allowed to publish messages on the channel %s", d.Channel),
 		})
 
@@ -367,14 +368,27 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn) {
 		publisherID = c.sessionID
 	}
 
-	nc.Publish("channel_publish", &natsChannelPublishData{
+	publishErr := nc.Publish("channel_publish", &natsChannelPublishData{
 		Channel:     appChannel,
 		Data:        d.Data,
 		PublisherID: publisherID,
 	})
+
+	if publishErr != nil {
+		c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
+		c.Ws.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypePublishError,
+			Reason: "internal server error publishing message",
+		})
+
+		return
+	}
+
+	c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
+	c.Ws.WriteJSON(protocol.NewPublishSuccessMessage(&protocol.PublishSuccessMessageData{Channel: d.Channel}))
 }
 
-func (c *Client) readMessages(rdb *redis.Client, nc *nats.EncodedConn) {
+func (c *Client) ReadMessages(rdb *redis.Client, nc *nats.EncodedConn) {
 	messagesSentLastSecondTicker := time.NewTicker(time.Second)
 	go func() {
 		for range messagesSentLastSecondTicker.C {
@@ -389,7 +403,7 @@ func (c *Client) readMessages(rdb *redis.Client, nc *nats.EncodedConn) {
 	}()
 
 	for {
-		_, msg, err := c.Ws.ReadMessage()
+		_, bytes, err := c.Ws.ReadMessage()
 		if err != nil {
 			break
 		}
@@ -400,22 +414,22 @@ func (c *Client) readMessages(rdb *redis.Client, nc *nats.EncodedConn) {
 		}
 
 		c.messagesSentLastSecond++
-		var payload message
-		unmarshalErr := json.Unmarshal(msg, &payload)
+		var message protocol.Message
+		unmarshalErr := json.Unmarshal(bytes, &message)
 		if unmarshalErr != nil {
 			CloseWithMessage(c.Ws, websocket.FormatCloseMessage(4010, "invalid message"))
 			break
 		}
 
-		switch payload.Type {
-		case typeSubscribe:
-			c.subscribe(payload.Data, rdb)
+		switch message.Type {
+		case protocol.MessageTypeSubscribe:
+			c.subscribe(message.Data, rdb)
 
-		case typeUnsubscribe:
-			c.unsubscribe(payload.Data, rdb)
+		case protocol.MessageTypeUnsubscribe:
+			c.unsubscribe(message.Data, rdb)
 
-		case typePublish:
-			c.publish(payload.Data, nc)
+		case protocol.MessageTypePublish:
+			c.publish(message.Data, nc)
 		}
 	}
 }

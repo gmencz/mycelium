@@ -1,16 +1,20 @@
-package ws
+package websocket
 
 import (
+	"context"
 	"strings"
 	"time"
 
 	"github.com/gmencz/mycelium/pkg/common"
+	"github.com/gmencz/mycelium/pkg/protocol"
 	"github.com/go-redis/redis/v8"
 	"github.com/nats-io/nats.go"
 	"github.com/sirupsen/logrus"
 )
 
-// Hub maintains the set of active clients and manages subscriptions.
+var ctx = context.Background()
+
+// Hub maintains all the state related to active clients.
 type Hub struct {
 	// Registered clients.
 	clients map[*Client]bool
@@ -78,11 +82,13 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 		}
 		channelName := channelParts[1]
 
+		message := protocol.NewPublishMessage(&protocol.PublishMessageData{Channel: channelName, Data: data.Data})
+
 		// If there's no publisherID, publish message to every subscriber of the channel.
 		if data.PublisherID == "" {
 			for _, c := range clients {
 				c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-				c.Ws.WriteJSON(newPublishMessage(channelName, data.Data))
+				c.Ws.WriteJSON(message)
 			}
 
 			return
@@ -93,7 +99,7 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 		for _, c := range clients {
 			if c.sessionID != data.PublisherID {
 				c.Ws.SetWriteDeadline(time.Now().Add(writeWait))
-				c.Ws.WriteJSON(newPublishMessage(channelName, data.Data))
+				c.Ws.WriteJSON(message)
 			}
 		}
 	})
