@@ -231,7 +231,7 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypeSubscribeError,
+			Type:   protocol.MessageTypeError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeSubscribe),
 		})
 
@@ -241,7 +241,7 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	d := protocol.SubscribeMessageData{}
 	if err := json.Unmarshal(jsonData, &d); err != nil {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypeSubscribeError,
+			Type:   protocol.MessageTypeError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeSubscribe),
 		})
 
@@ -251,8 +251,9 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	appChannel := c.AppID + ":" + d.Channel
 	if !common.ValidateString(d.Channel) {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypeSubscribeError,
-			Reason: fmt.Sprintf("invalid 'channel' for mesage of type '%v'", protocol.MessageTypeSubscribe),
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         fmt.Sprintf("invalid 'channel' for mesage of type '%v'", protocol.MessageTypeSubscribe),
 		})
 
 		return
@@ -261,8 +262,9 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	isAlreadySubscribed := slices.Contains(c.channels, appChannel)
 	if isAlreadySubscribed {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypeSubscribeError,
-			Reason: fmt.Sprintf("you're already subscribed to the channel %s", d.Channel),
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         fmt.Sprintf("you're already subscribed to the channel %s", d.Channel),
 		})
 
 		return
@@ -270,8 +272,9 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 
 	if len(c.channels) > maxChannels {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypeSubscribeError,
-			Reason: fmt.Sprintf("you can't subscribe to more than %v channels", maxChannels),
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         fmt.Sprintf("you can't subscribe to more than %v channels", maxChannels),
 		})
 
 		return
@@ -279,8 +282,9 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 
 	if !c.hasCapability(string(protocol.MessageTypeSubscribe), d.Channel, c.capabilities) {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypeSubscribeError,
-			Reason: fmt.Sprintf("you're not allowed to subscribe to the channel %s", d.Channel),
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         fmt.Sprintf("you're not allowed to subscribe to the channel %s", d.Channel),
 		})
 
 		return
@@ -289,14 +293,14 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 	c.channels = append(c.channels, appChannel)
 	c.hub.subscribe <- &hubSubscription{client: c, channel: appChannel}
 	rdb.Incr(ctx, "subscribers:"+appChannel)
-	c.WriteJSON(protocol.NewSubscribeSuccessMessage(&protocol.SubscribeSuccessMessageData{Channel: d.Channel}))
+	c.WriteJSON(protocol.NewSubscribeSuccessMessage(&protocol.SubscribeSuccessMessageData{Channel: d.Channel, SequenceNumber: d.SequenceNumber}))
 }
 
 func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypeUnsubscribeError,
+			Type:   protocol.MessageTypeError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeUnsubscribe),
 		})
 
@@ -306,7 +310,7 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	d := protocol.UnsubscribeMessageData{}
 	if err := json.Unmarshal(jsonData, &d); err != nil {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypeUnsubscribeError,
+			Type:   protocol.MessageTypeError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeUnsubscribe),
 		})
 
@@ -316,8 +320,9 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	appChannel := c.AppID + ":" + d.Channel
 	if !common.ValidateString(d.Channel) {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypeUnsubscribeError,
-			Reason: fmt.Sprintf("invalid 'channel' for mesage of type '%v'", protocol.MessageTypeUnsubscribe),
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         fmt.Sprintf("invalid 'channel' for mesage of type '%v'", protocol.MessageTypeUnsubscribe),
 		})
 
 		return
@@ -326,8 +331,9 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 	isSubscribed := slices.Contains(c.channels, appChannel)
 	if !isSubscribed {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypeUnsubscribeError,
-			Reason: fmt.Sprintf("you're not subscribed to the channel %s", d.Channel),
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         fmt.Sprintf("you're not subscribed to the channel %s", d.Channel),
 		})
 
 		return
@@ -345,14 +351,14 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 		rdb.Del(ctx, key)
 	}
 
-	c.WriteJSON(protocol.NewUnsubscribeSuccessMessage(&protocol.UnsubscribeSuccessMessageData{Channel: d.Channel}))
+	c.WriteJSON(protocol.NewUnsubscribeSuccessMessage(&protocol.UnsubscribeSuccessMessageData{Channel: d.Channel, SequenceNumber: d.SequenceNumber}))
 }
 
 func (c *Client) publish(data interface{}, nc *nats.EncodedConn, rdb *redis.Client) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypePublishError,
+			Type:   protocol.MessageTypeError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypePublish),
 		})
 
@@ -362,7 +368,7 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn, rdb *redis.Clie
 	d := protocol.PublishMessageDataData{}
 	if err := json.Unmarshal(jsonData, &d); err != nil {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypePublishError,
+			Type:   protocol.MessageTypeError,
 			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypePublish),
 		})
 
@@ -373,8 +379,9 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn, rdb *redis.Clie
 	isSubscribed := slices.Contains(c.channels, appChannel)
 	if !isSubscribed {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypePublishError,
-			Reason: fmt.Sprintf("you're not subscribed to the channel %s", d.Channel),
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         fmt.Sprintf("you're not subscribed to the channel %s", d.Channel),
 		})
 
 		return
@@ -382,8 +389,9 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn, rdb *redis.Clie
 
 	if !c.hasCapability(string(protocol.MessageTypePublish), d.Channel, c.capabilities) {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypePublishError,
-			Reason: fmt.Sprintf("you're not allowed to publish messages on the channel %s", d.Channel),
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         fmt.Sprintf("you're not allowed to publish messages on the channel %s", d.Channel),
 		})
 
 		return
@@ -402,8 +410,9 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn, rdb *redis.Clie
 
 	if publishErr != nil {
 		c.WriteJSON(&protocol.ErrorMessage{
-			Type:   protocol.MessageTypePublishError,
-			Reason: "internal server error publishing message",
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         "internal server error publishing message",
 		})
 
 		return
@@ -417,7 +426,7 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn, rdb *redis.Clie
 		logrus.Error(fmt.Sprintf("failed to track published message at key %s", publishedMessagesKey))
 	}
 
-	c.WriteJSON(protocol.NewPublishSuccessMessage(&protocol.PublishSuccessMessageData{Channel: d.Channel}))
+	c.WriteJSON(protocol.NewPublishSuccessMessage(&protocol.PublishSuccessMessageData{Channel: d.Channel, SequenceNumber: d.SequenceNumber}))
 }
 
 func (c *Client) WriteJSON(v interface{}) error {

@@ -48,9 +48,9 @@ type hubUnsubscription struct {
 }
 
 type natsChannelPublishData struct {
-	Channel     string      `json:"channel"`
-	Data        interface{} `json:"data"`
-	PublisherID string      `json:"publisher_id"`
+	Channel     string      `json:"c"`
+	Data        interface{} `json:"d"`
+	PublisherID string      `json:"pid"`
 }
 
 // NewHub returns an initialized Hub.
