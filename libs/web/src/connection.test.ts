@@ -1,5 +1,9 @@
 import waitForExpect from "wait-for-expect";
+import { WebSocket } from "ws";
 import { AuthenticationType, Connection, testConnect } from "./connection";
+
+// @ts-expect-error because it's a WebSocket type from an external lib.
+global.WebSocket = WebSocket;
 
 let conn: Connection;
 beforeAll(async () => {

@@ -1,7 +1,0 @@
-node_modules
-lib
-.eslintrc.js
-package.json
-package-lock.json
-coverage
-./esbuild.js

@@ -1,9 +1,7 @@
-import waitForExpect from "wait-for-expect";
-import { WebSocket } from "ws";
+import waitForExpect from 'wait-for-expect';
 
 interface ConnectionOptions {
   authentication: KeyAuthentication | TokenAuthentication;
-  timeoutMs?: number;
 }
 
 interface KeyAuthentication {
@@ -39,14 +37,14 @@ enum AuthenticationType {
 }
 
 enum MessageTypes {
-  Hello = "hello",
-  Error = "error",
-  Subscribe = "subscribe",
-  SubscribeSucess = "subscribe_success",
-  Unsubscribe = "unsubscribe",
-  UnsubscribeSuccess = "unsubscribe_success",
-  Publish = "publish",
-  PublishSuccess = "publish_success",
+  Hello = 'hello',
+  Error = 'error',
+  Subscribe = 'subscribe',
+  SubscribeSucess = 'subscribe_success',
+  Unsubscribe = 'unsubscribe',
+  UnsubscribeSuccess = 'unsubscribe_success',
+  Publish = 'publish',
+  PublishSuccess = 'publish_success',
 }
 
 type Handler<TData = unknown> = (
@@ -120,7 +118,7 @@ interface ErrorMessage {
 }
 
 const getURL = async (
-  authentication: ConnectionOptions["authentication"],
+  authentication: ConnectionOptions['authentication'],
   base: string
 ) => {
   let url: string;
@@ -136,23 +134,15 @@ const getURL = async (
 };
 
 const createWebSocket = async (opts: ConnectionOptions, base: string) => {
-  let WebSocketInstance: typeof WebSocket;
-  if (typeof WebSocket !== "undefined") {
-    WebSocketInstance = WebSocket;
-  } else {
-    WebSocketInstance = WebSocket;
-  }
-
   const url = await getURL(opts.authentication, base);
-  const ws = new WebSocketInstance(url);
-  return ws;
+  return new WebSocket(url);
 };
 
 const baseConnect = async (
   opts: ConnectionOptions,
   ws: WebSocket
 ): Promise<Connection> => {
-  let session: Connection["session"] | null = null;
+  let session: Connection['session'] | null = null;
   let seqNumber = 1;
   const channels: Set<string> = new Set();
   const handlers = new Map<string, { handler: Handler; name: string }[]>();
@@ -163,12 +153,12 @@ const baseConnect = async (
     }
   >();
 
-  ws.addEventListener("message", async (message) => {
+  ws.addEventListener('message', async (message) => {
     try {
       const parsed = JSON.parse(message.data.toString());
       switch (parsed.t) {
         case MessageTypes.Hello: {
-          const { sid } = parsed.d as HelloMessage["d"];
+          const { sid } = parsed.d as HelloMessage['d'];
           session = {
             id: sid,
           };
@@ -177,7 +167,7 @@ const baseConnect = async (
         }
 
         case MessageTypes.Publish: {
-          const { c: channel, d: data } = parsed.d as PublishMessage["d"];
+          const { c: channel, d: data } = parsed.d as PublishMessage['d'];
           const channelHandlers = handlers.get(channel);
           if (!channelHandlers || channelHandlers.length === 0) {
             console.warn(
@@ -195,20 +185,20 @@ const baseConnect = async (
         }
 
         case MessageTypes.PublishSuccess: {
-          const { s } = parsed.d as PublishSuccessMessage["d"];
+          const { s } = parsed.d as PublishSuccessMessage['d'];
           acks.set(s, { error: null });
           return;
         }
 
         case MessageTypes.SubscribeSucess: {
-          const { c, s } = parsed.d as SubscribeSuccessMessage["d"];
+          const { c, s } = parsed.d as SubscribeSuccessMessage['d'];
           channels.add(c);
           acks.set(s, { error: null });
           return;
         }
 
         case MessageTypes.UnsubscribeSuccess: {
-          const { c, s } = parsed.d as SubscribeSuccessMessage["d"];
+          const { c, s } = parsed.d as SubscribeSuccessMessage['d'];
           channels.delete(c);
           acks.set(s, { error: null });
           return;
@@ -230,7 +220,7 @@ const baseConnect = async (
 
   await waitForExpect(() => {
     if (!session) {
-      throw new Error("failed to connect");
+      throw new Error('failed to connect');
     }
   });
 
@@ -375,7 +365,7 @@ const baseConnect = async (
 const connect = async (opts: ConnectionOptions) => {
   return baseConnect(
     opts,
-    await createWebSocket(opts, "wss://mycelium-server.fly.dev/realtime")
+    await createWebSocket(opts, 'wss://mycelium-server.fly.dev/realtime')
   );
 };
 
@@ -391,4 +381,5 @@ export {
   KeyAuthentication,
   TokenAuthentication,
   Connection,
+  Handler,
 };

@@ -4,4 +4,6 @@ export {
   ConnectionOptions,
   KeyAuthentication,
   TokenAuthentication,
-} from "./connection";
+  Connection,
+  Handler,
+} from './connection';
