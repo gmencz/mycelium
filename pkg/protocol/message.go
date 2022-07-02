@@ -67,6 +67,7 @@ type UnsubscribeSuccessMessageData struct {
 // Data of messages of type "publish".
 type PublishMessageData struct {
 	Channel string      `json:"c"`
+	Event   string      `json:"e"`
 	Data    interface{} `json:"d"`
 }
 
@@ -75,6 +76,7 @@ type PublishMessageDataData struct {
 	SequenceNumber   int64       `json:"s"`
 	IncludePublisher bool        `json:"ip"`
 	Channel          string      `json:"c"`
+	Event            string      `json:"e"`
 	Data             interface{} `json:"d"`
 }
 

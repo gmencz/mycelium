@@ -404,6 +404,7 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn, rdb *redis.Clie
 
 	publishErr := nc.Publish("channel_publish", &natsChannelPublishData{
 		Channel:     appChannel,
+		Event:       d.Event,
 		Data:        d.Data,
 		PublisherID: publisherID,
 	})

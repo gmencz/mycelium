@@ -49,6 +49,7 @@ type hubUnsubscription struct {
 
 type natsChannelPublishData struct {
 	Channel     string      `json:"c"`
+	Event       string      `json:"e"`
 	Data        interface{} `json:"d"`
 	PublisherID string      `json:"pid"`
 }
@@ -81,7 +82,7 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 		}
 		channelName := channelParts[1]
 
-		message := protocol.NewPublishMessage(&protocol.PublishMessageData{Channel: channelName, Data: data.Data})
+		message := protocol.NewPublishMessage(&protocol.PublishMessageData{Channel: channelName, Data: data.Data, Event: data.Event})
 
 		// If there's no publisherID, publish message to every subscriber of the channel.
 		if data.PublisherID == "" {
