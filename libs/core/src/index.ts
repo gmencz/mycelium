@@ -7,3 +7,5 @@ export {
   Channel,
   Listener,
 } from './client';
+
+export { Situation } from './message';

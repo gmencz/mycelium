@@ -7,6 +7,11 @@ enum MessageTypes {
   UnsubscribeSuccess = 'unsubscribe_success',
   Publish = 'publish',
   PublishSuccess = 'publish_success',
+  SituationListen = 'situation_listen',
+  SituationListenSuccess = 'situation_listen_success',
+  SituationUnlisten = 'situation_unlisten',
+  SituationUnlistenSuccess = 'situation_unlisten_success',
+  SituationChange = 'situation_change',
 }
 
 interface HelloMessage {
@@ -41,6 +46,19 @@ interface PublishMessage {
   };
 }
 
+enum Situation {
+  Vacant = 'vacant',
+  Occupied = 'occupied',
+}
+
+interface SituationChangeMessage {
+  t: MessageTypes.SituationChange;
+  d: {
+    s: Situation;
+    c: string;
+  };
+}
+
 interface ErrorMessage {
   s?: number;
   t: MessageTypes;
@@ -51,7 +69,9 @@ export {
   ErrorMessage,
   HelloMessage,
   MessageTypes,
+  Situation,
   PublishMessage,
+  SituationChangeMessage,
   PublishSuccessMessage,
   SubscribeSuccessMessage,
 };

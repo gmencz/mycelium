@@ -7,7 +7,9 @@ import {
   MessageTypes,
   PublishMessage,
   PublishSuccessMessage,
+  SituationChangeMessage,
   SubscribeSuccessMessage,
+  Situation,
 } from './message';
 
 interface KeyAuthentication {
@@ -74,6 +76,20 @@ interface Channel {
   unsubscribe: () => Promise<void>;
 }
 
+type SituationListener = (channelName: string) => void;
+
+interface SituationChangesListener {
+  prefix: string;
+  on: (situation: Situation, listener: SituationListener) => void;
+  once: (situation: Situation, listener: SituationListener) => void;
+  off: (situation: Situation, listener: SituationListener) => void;
+  offOnce: (situation: Situation, listener: SituationListener) => void;
+  removeAllListeners: (...situations: Situation[]) => void;
+  onAny: (listener: SituationListener) => void;
+  prependAny: (listener: SituationListener) => void;
+  offAny: (...listeners: SituationListener[]) => void;
+}
+
 const defaults = {
   baseURL: 'wss://mycelium-server.fly.dev/realtime',
 };
@@ -86,6 +102,22 @@ class Client {
       eventListeners: { event: string; listener: Listener<any> }[];
       anyListeners: Listener<any>[];
       onceListeners: { event: string; listener: Listener<any> }[];
+    }
+  >();
+
+  private situationChangesPrefixesListeners = new Map<
+    string,
+    {
+      instance: SituationChangesListener;
+      situationListeners: {
+        situation: Situation;
+        fn: SituationListener;
+      }[];
+      situationOnceListeners: {
+        situation: Situation;
+        fn: SituationListener;
+      }[];
+      situationAnyListeners: SituationListener[];
     }
   >();
 
@@ -107,9 +139,252 @@ class Client {
     return Array.from(this.channels.keys());
   }
 
-  public async channel(channelName: string): Promise<Channel> {
+  public async getOrListenToSituationChanges(
+    channelPrefix: string
+  ): Promise<SituationChangesListener> {
     if (!this.isConnected || !this.ws) {
-      throw new Error(`failed to use channel ${channelName}, not connected`);
+      throw new Error(
+        `failed to listen to situation changes on prefix ${channelPrefix}, not connected`
+      );
+    }
+
+    const existingListener =
+      this.situationChangesPrefixesListeners.get(channelPrefix);
+
+    if (existingListener) {
+      return existingListener.instance;
+    }
+
+    const listenSeq = this.seqNumber++;
+
+    this.ws.send(
+      JSON.stringify({
+        t: MessageTypes.SituationListen,
+        d: {
+          s: listenSeq,
+          cp: channelPrefix,
+        },
+      })
+    );
+
+    await waitForExpect(() => {
+      if (!this.acks.has(listenSeq)) {
+        throw new Error(
+          `failed to listen to situation changes on prefix ${channelPrefix}, timed out`
+        );
+      }
+    });
+
+    const ack = this.acks.get(listenSeq);
+    if (ack?.failureReason) {
+      throw new Error(ack.failureReason);
+    }
+
+    const instance: SituationChangesListener = {
+      prefix: channelPrefix,
+
+      removeAllListeners: (...situations) => {
+        const prefix =
+          this.situationChangesPrefixesListeners.get(channelPrefix);
+
+        if (prefix) {
+          if (!situations.length) {
+            // Remove all listeners
+            this.situationChangesPrefixesListeners.set(channelPrefix, {
+              ...prefix,
+              situationListeners: [],
+            });
+
+            return;
+          }
+
+          const maxSituations = Object.keys(Situation).length;
+          if (situations.length > maxSituations) {
+            throw new Error(
+              `Too many situations for removeAllListeners, maximum ${maxSituations}`
+            );
+          }
+
+          this.situationChangesPrefixesListeners.set(channelPrefix, {
+            ...prefix,
+            situationListeners: prefix.situationListeners.filter(
+              (l) => !situations.some((s) => s === l.situation)
+            ),
+          });
+        }
+      },
+
+      onAny: (listener) => {
+        const prefix =
+          this.situationChangesPrefixesListeners.get(channelPrefix);
+
+        if (prefix) {
+          this.situationChangesPrefixesListeners.set(channelPrefix, {
+            ...prefix,
+            situationAnyListeners: [...prefix.situationAnyListeners, listener],
+          });
+        }
+      },
+
+      prependAny: (listener) => {
+        const prefix =
+          this.situationChangesPrefixesListeners.get(channelPrefix);
+
+        if (prefix) {
+          this.situationChangesPrefixesListeners.set(channelPrefix, {
+            ...prefix,
+            situationAnyListeners: [listener, ...prefix.situationAnyListeners],
+          });
+        }
+      },
+
+      off: (situation, listener) => {
+        const prefix =
+          this.situationChangesPrefixesListeners.get(channelPrefix);
+
+        if (prefix) {
+          this.situationChangesPrefixesListeners.set(channelPrefix, {
+            ...prefix,
+            situationListeners: prefix.situationListeners.filter(
+              (i) => i.situation !== situation && i.fn !== listener
+            ),
+          });
+        }
+      },
+
+      once: (situation, listener) => {
+        const prefix =
+          this.situationChangesPrefixesListeners.get(channelPrefix);
+
+        if (prefix) {
+          this.situationChangesPrefixesListeners.set(channelPrefix, {
+            ...prefix,
+            situationOnceListeners: [
+              ...prefix.situationOnceListeners.filter(
+                (l) => l.situation !== situation
+              ),
+              {
+                fn: listener,
+                situation,
+              },
+            ],
+          });
+        }
+      },
+
+      offOnce: (situation, listener) => {
+        const prefix =
+          this.situationChangesPrefixesListeners.get(channelPrefix);
+
+        if (prefix) {
+          this.situationChangesPrefixesListeners.set(channelPrefix, {
+            ...prefix,
+            situationOnceListeners: prefix.situationOnceListeners.filter(
+              (l) => l.situation !== situation && l.fn !== listener
+            ),
+          });
+        }
+      },
+
+      on: (situation: Situation, listener) => {
+        const prefix =
+          this.situationChangesPrefixesListeners.get(channelPrefix);
+
+        if (prefix) {
+          this.situationChangesPrefixesListeners.set(channelPrefix, {
+            ...prefix,
+            situationListeners: [
+              ...prefix.situationListeners,
+              {
+                fn: listener,
+                situation,
+              },
+            ],
+          });
+        }
+      },
+
+      offAny: (...listeners) => {
+        const prefix =
+          this.situationChangesPrefixesListeners.get(channelPrefix);
+
+        if (prefix) {
+          if (!listeners.length) {
+            // Remove all listeners
+            this.situationChangesPrefixesListeners.set(channelPrefix, {
+              ...prefix,
+              situationAnyListeners: [],
+            });
+
+            return;
+          }
+
+          this.situationChangesPrefixesListeners.set(channelPrefix, {
+            ...prefix,
+            situationAnyListeners: prefix.situationAnyListeners.filter(
+              (l) => !listeners.some((listener) => listener === l)
+            ),
+          });
+        }
+      },
+    };
+
+    this.situationChangesPrefixesListeners.set(channelPrefix, {
+      instance,
+      situationListeners: [],
+      situationOnceListeners: [],
+      situationAnyListeners: [],
+    });
+
+    return instance;
+  }
+
+  public async unlistenToSituationChanges(channelPrefix: string) {
+    if (!this.isConnected || !this.ws) {
+      throw new Error(
+        `failed to unlisten to situation changes on prefix ${channelPrefix}, not connected`
+      );
+    }
+
+    if (!this.situationChangesPrefixesListeners.has(channelPrefix)) {
+      throw new Error(
+        `failed to unlisten to situation changes on prefix ${channelPrefix}, not listening`
+      );
+    }
+
+    const unlistenSeq = this.seqNumber++;
+
+    this.ws.send(
+      JSON.stringify({
+        t: MessageTypes.SituationUnlisten,
+        d: {
+          s: unlistenSeq,
+          cp: channelPrefix,
+        },
+      })
+    );
+
+    await waitForExpect(() => {
+      if (!this.acks.has(unlistenSeq)) {
+        throw new Error(
+          `failed to unlisten to situation changes on prefix ${channelPrefix}, timed out`
+        );
+      }
+    });
+
+    const ack = this.acks.get(unlistenSeq);
+    if (ack?.failureReason) {
+      throw new Error(ack.failureReason);
+    }
+
+    this.situationChangesPrefixesListeners.delete(channelPrefix);
+  }
+
+  public async getOrSubscribeToChannel(channelName: string): Promise<Channel> {
+    if (!this.isConnected || !this.ws) {
+      throw new Error(
+        `failed to get or subscribe to channel ${channelName}, not connected`
+      );
     }
 
     const existingChannel = this.channels.get(channelName);
@@ -456,6 +731,37 @@ class Client {
             return;
           }
 
+          case MessageTypes.SituationChange: {
+            const { c: channelName, s: situation } =
+              message.d as SituationChangeMessage['d'];
+
+            for (const prefix of this.situationChangesPrefixesListeners.keys()) {
+              if (channelName.startsWith(prefix)) {
+                const {
+                  situationListeners,
+                  situationOnceListeners,
+                  situationAnyListeners,
+                } = this.situationChangesPrefixesListeners.get(prefix)!;
+
+                situationListeners.forEach((listener) => {
+                  if (listener.situation === situation) {
+                    listener.fn(channelName);
+                  }
+                });
+
+                situationOnceListeners
+                  .find((l) => l.situation === situation)
+                  ?.fn(channelName);
+
+                situationAnyListeners.forEach((listener) => {
+                  listener(channelName);
+                });
+              }
+            }
+          }
+
+          case MessageTypes.SituationUnlistenSuccess:
+          case MessageTypes.SituationListenSuccess:
           case MessageTypes.UnsubscribeSuccess:
           case MessageTypes.PublishSuccess:
           case MessageTypes.SubscribeSucess: {
