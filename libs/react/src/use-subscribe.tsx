@@ -63,6 +63,7 @@ export function useSubscribe() {
       }
     },
 
+    channel,
     isLoading: state.isLoading,
     isSuccess: state.isSuccess,
     isError: state.isError,

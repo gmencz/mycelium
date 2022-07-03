@@ -64,6 +64,7 @@ func NewServer() *Server {
 	}
 
 	// Middlewares
+	router.Use(middlewares.CORSMiddleware())
 	router.Use(rateLimiterMiddleware)
 
 	// Routes
@@ -76,16 +77,10 @@ func NewServer() *Server {
 		controller.Realtime(ctx, database, rdb, c, wsHub)
 	})
 
-	// API:v1.0
-	v1 := router.Group("/api/v1/")
-	{
-		rHealth := v1.Group("health")
-		rHealth.GET("", controller.Health)
-		rHealth.GET("/live", controller.HealthLive)
+	router.GET("/health", controller.Health)
+	router.GET("/health/live", controller.HealthLive)
 
-		rApps := v1.Group("apps")
-		rApps.GET("/:id/channels", controller.GetApp)
-	}
+	router.GET("/channels", controller.GetChannels)
 
 	srv := &Server{
 		router:          router,
@@ -130,10 +125,6 @@ func (s *Server) Shutdown() {
 		os.Exit(1)
 	}()
 
-	for client := range s.wsHub.ClientsChannels {
-		client.CloseWithMessage(wsLib.FormatCloseMessage(4009, "please reconnect"))
-	}
-
 	for channel := range s.wsHub.ChannelsClients {
 		key := "subscribers:" + channel
 		decrBy := len(s.wsHub.ChannelsClients[channel])
@@ -141,6 +132,10 @@ func (s *Server) Shutdown() {
 		subscribersLeft := i.Val()
 		if subscribersLeft <= 0 {
 			s.rdb.Del(ctx, key)
+			s.nc.Publish("situation_change", &websocket.NatsSituationChangeData{
+				Channel:   channel,
+				Situation: "vacant",
+			})
 		}
 	}
 
@@ -160,6 +155,10 @@ func (s *Server) Shutdown() {
 		if clientsLeft.Val() <= 0 {
 			s.rdb.Del(ctx, key)
 		}
+	}
+
+	for client := range s.wsHub.Clients {
+		client.CloseWithMessage(wsLib.FormatCloseMessage(4009, "please reconnect"))
 	}
 
 	os.Exit(0)

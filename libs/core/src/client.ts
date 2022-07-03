@@ -459,9 +459,7 @@ class Client {
           case MessageTypes.UnsubscribeSuccess:
           case MessageTypes.PublishSuccess:
           case MessageTypes.SubscribeSucess: {
-            const { c: channelName, s } =
-              message.d as SubscribeSuccessMessage['d'];
-
+            const { s } = message.d as SubscribeSuccessMessage['d'];
             this.acks.set(s, {});
             return;
           }

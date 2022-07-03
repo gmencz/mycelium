@@ -14,6 +14,14 @@ const (
 
 	MessageTypePublish        = "publish"         // Client -> server when wanting to unsubscribe from a channel.
 	MessageTypePublishSuccess = "publish_success" // Server -> client after a successful publish.
+
+	MessageTypeSituationListen        = "situation_listen"         // Client -> server when wanting to listen to the situation of channels.
+	MessageTypeSituationListenSuccess = "situation_listen_success" // Server -> client after a situation listen.
+
+	MessageTypeSituationUnlisten        = "situation_unlisten"         // Client -> server when wanting to unlisten to the situation of channels.
+	MessageTypeSituationUnlistenSuccess = "situation_unlisten_success" // Server -> client after a situation unlisten.
+
+	MessageTypeSituationChange = "situation_change" // Server -> client after a situation change.
 )
 
 // Server <-> client message.
@@ -48,20 +56,17 @@ type ErrorMessage struct {
 
 // Data of messages of type "subscribe_success".
 type SubscribeSuccessMessageData struct {
-	SequenceNumber int64  `json:"s"`
-	Channel        string `json:"c"`
+	SequenceNumber int64 `json:"s"`
 }
 
 // Data of messages of type "publish_success".
 type PublishSuccessMessageData struct {
-	SequenceNumber int64  `json:"s"`
-	Channel        string `json:"c"`
+	SequenceNumber int64 `json:"s"`
 }
 
 // Data of messages of type "unsubscribe_success".
 type UnsubscribeSuccessMessageData struct {
-	SequenceNumber int64  `json:"s"`
-	Channel        string `json:"c"`
+	SequenceNumber int64 `json:"s"`
 }
 
 // Data of messages of type "publish".
@@ -78,6 +83,37 @@ type PublishMessageDataData struct {
 	Channel          string      `json:"c"`
 	Event            string      `json:"e"`
 	Data             interface{} `json:"d"`
+}
+
+// We're creating a new type of message that allows clients to be notified of the
+// vacancy/occupation (situation) of channels by a prefix.
+
+// Data of messages of type "situation_listen".
+type SituationListenMessageData struct {
+	SequenceNumber int64  `json:"s"`
+	ChannelPrefix  string `json:"cp"`
+}
+
+// Data of messages of type "situation_unlisten".
+type SituationUnlistenMessageData struct {
+	SequenceNumber int64  `json:"s"`
+	ChannelPrefix  string `json:"cp"`
+}
+
+// Data of messages of type "situation_listen_success".
+type SituationListenSuccessMessageData struct {
+	SequenceNumber int64 `json:"s"`
+}
+
+// Data of messages of type "situation_unlisten_success".
+type SituationUnlistenSuccessMessageData struct {
+	SequenceNumber int64 `json:"s"`
+}
+
+// Data of messages of type "situation_change".
+type SituationChangeMessageData struct {
+	Channel   string `json:"c"`
+	Situation string `json:"s"`
 }
 
 // Returns a message with the data of messages of type "hello".
@@ -116,6 +152,30 @@ func NewUnsubscribeSuccessMessage(data *UnsubscribeSuccessMessageData) *Message 
 func NewPublishMessage(data *PublishMessageData) *Message {
 	return &Message{
 		Type: MessageTypePublish,
+		Data: data,
+	}
+}
+
+// Returns a message with the data of messages of type "situation_change".
+func NewSituationChangeMessage(data *SituationChangeMessageData) *Message {
+	return &Message{
+		Type: MessageTypeSituationChange,
+		Data: data,
+	}
+}
+
+// Returns a message with the data of messages of type "situation_listen_success".
+func NewSituationListenSuccessMessage(data *SituationListenSuccessMessageData) *Message {
+	return &Message{
+		Type: MessageTypeSituationListenSuccess,
+		Data: data,
+	}
+}
+
+// Returns a message with the data of messages of type "situation_listen_success".
+func NewSituationUnlistenSuccessMessage(data *SituationUnlistenSuccessMessageData) *Message {
+	return &Message{
+		Type: MessageTypeSituationUnlistenSuccess,
 		Data: data,
 	}
 }

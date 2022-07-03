@@ -32,9 +32,6 @@ type Hub struct {
 
 	// The channels and clients subscribed to them.
 	ChannelsClients map[string][]*Client
-
-	// The clients and channels they're subscribed to.
-	ClientsChannels map[*Client][]string
 }
 
 type hubSubscription struct {
@@ -54,6 +51,11 @@ type natsChannelPublishData struct {
 	PublisherID string      `json:"pid"`
 }
 
+type NatsSituationChangeData struct {
+	Channel   string `json:"c"`
+	Situation string `json:"s"`
+}
+
 // NewHub returns an initialized Hub.
 func NewHub() *Hub {
 	return &Hub{
@@ -63,12 +65,31 @@ func NewHub() *Hub {
 		subscribe:       make(chan *hubSubscription),
 		unsubscribe:     make(chan *hubUnsubscription),
 		ChannelsClients: make(map[string][]*Client),
-		ClientsChannels: make(map[*Client][]string),
 	}
 }
 
 // Run runs the Hub.
 func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
+	nc.Subscribe("situation_change", func(data *NatsSituationChangeData) {
+		// Channel parts: <app-id>:<channel-name>
+		channelParts := strings.Split(data.Channel, ":")
+		if len(channelParts) != 2 {
+			return
+		}
+		channelName := channelParts[1]
+
+		message := protocol.NewSituationChangeMessage(&protocol.SituationChangeMessageData{Channel: channelName, Situation: data.Situation})
+		for c := range h.Clients {
+			hasPrefix := common.Some(c.SituationListeningPrefixes, func(prefix string) bool {
+				return strings.HasPrefix(channelName, prefix)
+			})
+
+			if hasPrefix {
+				c.WriteJSON(message)
+			}
+		}
+	})
+
 	nc.Subscribe("channel_publish", func(data *natsChannelPublishData) {
 		clients, ok := h.ChannelsClients[data.Channel]
 		if !ok {
@@ -119,6 +140,10 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 					subscribersLeft := i.Val()
 					if subscribersLeft <= 0 {
 						rdb.Del(ctx, key)
+						nc.Publish("situation_change", &NatsSituationChangeData{
+							Channel:   channel,
+							Situation: "vacant",
+						})
 					}
 				}
 
@@ -133,7 +158,6 @@ func (h *Hub) Run(rdb *redis.Client, nc *nats.EncodedConn) {
 				rdb.Del(ctx, currentClientsKey)
 			}
 
-			delete(h.ClientsChannels, c)
 			logrus.Info("client unregistered, updated number of clients: ", len(h.Clients))
 
 		case subscription := <-h.subscribe:

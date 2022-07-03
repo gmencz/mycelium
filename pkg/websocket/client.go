@@ -23,15 +23,16 @@ import (
 )
 
 type Client struct {
-	hub                    *Hub
-	sessionID              string
-	Ws                     *websocket.Conn
-	apiKeyID               string
-	AppID                  string
-	capabilities           map[string]string
-	channels               []string
-	messagesSentLastSecond int
-	mu                     sync.Mutex
+	hub                        *Hub
+	sessionID                  string
+	Ws                         *websocket.Conn
+	apiKeyID                   string
+	AppID                      string
+	capabilities               map[string]string
+	channels                   []string
+	SituationListeningPrefixes []string
+	messagesSentLastSecond     int
+	mu                         sync.Mutex
 }
 
 const (
@@ -227,7 +228,7 @@ func (c *Client) hasCapability(capability string, channel string, capabilities m
 	return false
 }
 
-func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
+func (c *Client) subscribe(data interface{}, rdb *redis.Client, nc *nats.EncodedConn) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		c.WriteJSON(&protocol.ErrorMessage{
@@ -290,13 +291,41 @@ func (c *Client) subscribe(data interface{}, rdb *redis.Client) {
 		return
 	}
 
+	i := rdb.Incr(ctx, "subscribers:"+appChannel)
+	if i.Err() != nil {
+		c.WriteJSON(&protocol.ErrorMessage{
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         "internal server error subscribing",
+		})
+
+		return
+	}
+
+	subscribers := i.Val()
+	if subscribers == 1 {
+		situationChangeErr := nc.Publish("situation_change", &NatsSituationChangeData{
+			Channel:   appChannel,
+			Situation: "occupied",
+		})
+
+		if situationChangeErr != nil {
+			c.WriteJSON(&protocol.ErrorMessage{
+				Type:           protocol.MessageTypeError,
+				SequenceNumber: d.SequenceNumber,
+				Reason:         "internal server error notifying of situation change",
+			})
+
+			return
+		}
+	}
+
 	c.channels = append(c.channels, appChannel)
 	c.hub.subscribe <- &hubSubscription{client: c, channel: appChannel}
-	rdb.Incr(ctx, "subscribers:"+appChannel)
-	c.WriteJSON(protocol.NewSubscribeSuccessMessage(&protocol.SubscribeSuccessMessageData{Channel: d.Channel, SequenceNumber: d.SequenceNumber}))
+	c.WriteJSON(protocol.NewSubscribeSuccessMessage(&protocol.SubscribeSuccessMessageData{SequenceNumber: d.SequenceNumber}))
 }
 
-func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
+func (c *Client) unsubscribe(data interface{}, rdb *redis.Client, nc *nats.EncodedConn) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		c.WriteJSON(&protocol.ErrorMessage{
@@ -339,19 +368,52 @@ func (c *Client) unsubscribe(data interface{}, rdb *redis.Client) {
 		return
 	}
 
+	key := "subscribers:" + appChannel
+	i := rdb.Decr(ctx, key)
+	if i.Err() != nil {
+		c.WriteJSON(&protocol.ErrorMessage{
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         "internal server error unsubscribing; 1",
+		})
+
+		return
+	}
+
+	subscribersLeft := i.Val()
+	if subscribersLeft <= 0 {
+		if del := rdb.Del(ctx, key); del.Err() != nil {
+			c.WriteJSON(&protocol.ErrorMessage{
+				Type:           protocol.MessageTypeError,
+				SequenceNumber: d.SequenceNumber,
+				Reason:         "internal server error unsubscribing; 2",
+			})
+
+			return
+		}
+
+		situationChangeErr := nc.Publish("situation_change", &NatsSituationChangeData{
+			Channel:   appChannel,
+			Situation: "vacant",
+		})
+
+		if situationChangeErr != nil {
+			c.WriteJSON(&protocol.ErrorMessage{
+				Type:           protocol.MessageTypeError,
+				SequenceNumber: d.SequenceNumber,
+				Reason:         "internal server error notifying of situation change",
+			})
+
+			return
+		}
+	}
+
 	c.channels = common.Filter(c.channels, func(channel string) bool {
 		return channel != appChannel
 	})
 
 	c.hub.unsubscribe <- &hubUnsubscription{client: c, channel: appChannel}
-	key := "subscribers:" + appChannel
-	i := rdb.Decr(ctx, key)
-	subscribersLeft := i.Val()
-	if subscribersLeft <= 0 {
-		rdb.Del(ctx, key)
-	}
-
-	c.WriteJSON(protocol.NewUnsubscribeSuccessMessage(&protocol.UnsubscribeSuccessMessageData{Channel: d.Channel, SequenceNumber: d.SequenceNumber}))
+	c.WriteJSON(protocol.NewUnsubscribeSuccessMessage(&protocol.UnsubscribeSuccessMessageData{SequenceNumber: d.SequenceNumber}))
 }
 
 func (c *Client) publish(data interface{}, nc *nats.EncodedConn, rdb *redis.Client) {
@@ -427,7 +489,7 @@ func (c *Client) publish(data interface{}, nc *nats.EncodedConn, rdb *redis.Clie
 		logrus.Error(fmt.Sprintf("failed to track published message at key %s", publishedMessagesKey))
 	}
 
-	c.WriteJSON(protocol.NewPublishSuccessMessage(&protocol.PublishSuccessMessageData{Channel: d.Channel, SequenceNumber: d.SequenceNumber}))
+	c.WriteJSON(protocol.NewPublishSuccessMessage(&protocol.PublishSuccessMessageData{SequenceNumber: d.SequenceNumber}))
 }
 
 func (c *Client) WriteJSON(v interface{}) error {
@@ -448,6 +510,101 @@ func (c *Client) CloseWithMessage(data []byte) {
 	c.Write(websocket.CloseMessage, data)
 	time.Sleep(closeGracePeriod)
 	c.Ws.Close()
+}
+
+func (c *Client) situationListen(data interface{}) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		c.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeSituationListen),
+		})
+
+		return
+	}
+
+	d := protocol.SituationListenMessageData{}
+	if err := json.Unmarshal(jsonData, &d); err != nil {
+		c.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeSituationListen),
+		})
+
+		return
+	}
+
+	if d.ChannelPrefix == "" {
+		c.WriteJSON(&protocol.ErrorMessage{
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         fmt.Sprintf("invalid data for mesage of type '%v', channel prefix can't be empty", protocol.MessageTypeSituationListen),
+		})
+
+		return
+	}
+
+	alreadyListening := slices.Contains(c.SituationListeningPrefixes, d.ChannelPrefix)
+	if alreadyListening {
+		c.WriteJSON(&protocol.ErrorMessage{
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         "you're already listening to situation changes on channels with this prefix",
+		})
+
+		return
+	}
+
+	c.SituationListeningPrefixes = append(c.SituationListeningPrefixes, d.ChannelPrefix)
+	c.WriteJSON(protocol.NewSituationListenSuccessMessage(&protocol.SituationListenSuccessMessageData{SequenceNumber: d.SequenceNumber}))
+}
+
+func (c *Client) situationUnlisten(data interface{}) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		c.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeSituationUnlisten),
+		})
+
+		return
+	}
+
+	d := protocol.SituationUnlistenMessageData{}
+	if err := json.Unmarshal(jsonData, &d); err != nil {
+		c.WriteJSON(&protocol.ErrorMessage{
+			Type:   protocol.MessageTypeError,
+			Reason: fmt.Sprintf("invalid data for mesage of type '%v'", protocol.MessageTypeSituationUnlisten),
+		})
+
+		return
+	}
+
+	if d.ChannelPrefix == "" {
+		c.WriteJSON(&protocol.ErrorMessage{
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         fmt.Sprintf("invalid data for mesage of type '%v', channel prefix can't be empty", protocol.MessageTypeSituationUnlisten),
+		})
+
+		return
+	}
+
+	alreadyListening := slices.Contains(c.SituationListeningPrefixes, d.ChannelPrefix)
+	if !alreadyListening {
+		c.WriteJSON(&protocol.ErrorMessage{
+			Type:           protocol.MessageTypeError,
+			SequenceNumber: d.SequenceNumber,
+			Reason:         "you're not listening to situation changes on channels with this prefix",
+		})
+
+		return
+	}
+
+	c.SituationListeningPrefixes = common.Filter(c.SituationListeningPrefixes, func(prefix string) bool {
+		return prefix != d.ChannelPrefix
+	})
+
+	c.WriteJSON(protocol.NewSituationUnlistenSuccessMessage(&protocol.SituationUnlistenSuccessMessageData{SequenceNumber: d.SequenceNumber}))
 }
 
 func (c *Client) ReadMessages(rdb *redis.Client, nc *nats.EncodedConn) {
@@ -485,13 +642,19 @@ func (c *Client) ReadMessages(rdb *redis.Client, nc *nats.EncodedConn) {
 
 		switch message.Type {
 		case protocol.MessageTypeSubscribe:
-			c.subscribe(message.Data, rdb)
+			c.subscribe(message.Data, rdb, nc)
 
 		case protocol.MessageTypeUnsubscribe:
-			c.unsubscribe(message.Data, rdb)
+			c.unsubscribe(message.Data, rdb, nc)
 
 		case protocol.MessageTypePublish:
 			c.publish(message.Data, nc, rdb)
+
+		case protocol.MessageTypeSituationListen:
+			c.situationListen(message.Data)
+
+		case protocol.MessageTypeSituationUnlisten:
+			c.situationUnlisten(message.Data)
 		}
 	}
 }

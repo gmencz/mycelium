@@ -29,3 +29,17 @@ func NewRateLimiterMiddleware(formattedRate string, rdb *redis.Client) (gin.Hand
 	middleware := mgin.NewMiddleware(limiter.New(limiterStore, rate))
 	return middleware, nil
 }
+
+func CORSMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Headers", "*")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	}
+}

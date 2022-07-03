@@ -28,6 +28,16 @@ func Map[T any](slice []T, f func(v T) T) []T {
 	return mapped
 }
 
+func Some[T any](slice []T, f func(T) bool) bool {
+	for _, e := range slice {
+		if f(e) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func ParseAuthorizationHeader(header string) (string, error) {
 	isBearerFormat := strings.HasPrefix(header, "Bearer ")
 	if !isBearerFormat {
