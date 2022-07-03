@@ -85,9 +85,6 @@ type PublishMessageDataData struct {
 	Data             interface{} `json:"d"`
 }
 
-// We're creating a new type of message that allows clients to be notified of the
-// vacancy/occupation (situation) of channels by a prefix.
-
 // Data of messages of type "situation_listen".
 type SituationListenMessageData struct {
 	SequenceNumber int64  `json:"s"`
