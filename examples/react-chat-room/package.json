@@ -1,0 +1,24 @@
+{
+  "name": "example",
+  "private": true,
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "@tsconfig/create-react-app": "^1.0.2",
+    "@types/react": "^18.0.14",
+    "@types/react-dom": "^18.0.5",
+    "typescript": "^4",
+    "vite": "latest",
+    "vite-preset-react": "latest"
+  },
+  "dependencies": {
+    "@mycelium-now/react": "^1.2.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}

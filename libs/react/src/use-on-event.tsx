@@ -1,6 +1,4 @@
-import { Channel, Listener } from '@mycelium-now/core';
-
-import invariant from 'invariant';
+import { Channel } from '@mycelium-now/core';
 import { useEffect } from 'react';
 
 /**
@@ -8,26 +6,22 @@ import { useEffect } from 'react';
  *
  * @param channel Mycelium channel to listen to
  * @param event Name of event to listen to
- * @param listener Listener function to call on a new event
+ * @param callback Listener function to call on a new event
  */
 export function useOnEvent<TData = unknown>(
   channel: Channel | undefined,
   event: string,
-  listener: Listener<TData>
+  callback: (data: TData) => void
 ) {
-  // error when required arguments aren't passed.
-  invariant(event, 'Must supply event to useOnEvent');
-  invariant(listener, 'Must supply listener to useOnEvent');
-
   useEffect(() => {
     if (!channel) {
       return;
     }
 
-    channel.on(event, listener);
+    channel.on(event, callback);
 
     return () => {
-      channel.off(event, listener);
+      channel.off(event, callback);
     };
-  }, [channel, event, listener]);
+  }, [channel, event, callback]);
 }

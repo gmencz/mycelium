@@ -1,10 +1,10 @@
-import { Channel, Listener } from '@mycelium-now/core';
-import { useEffect, useState } from 'react';
+import { Channel } from '@mycelium-now/core';
+import { useState } from 'react';
 
 /**
  * Publish an event.
  *
- * @param channel Mycelium channel to publish on
+ * @param channel Mycelium channel to publish on.
  */
 export function usePublishEvent(channel: Channel | undefined) {
   const [state, setState] = useState({
@@ -32,7 +32,7 @@ export function usePublishEvent(channel: Channel | undefined) {
           error: null,
         });
 
-        await channel.publish(event, data, includePublisher);
+        await channel.instance.publish(event, data, includePublisher);
 
         setState({
           isLoading: false,

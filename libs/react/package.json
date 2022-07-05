@@ -1,7 +1,7 @@
 {
   "name": "@mycelium-now/react",
-  "version": "1.0.1",
-  "license": "IST",
+  "version": "1.2.1",
+  "license": "MIT",
   "author": "Mycelium",
   "main": "dist/index.js",
   "module": "dist/react.esm.js",
@@ -66,8 +66,7 @@
     "typescript": "^4.7.4"
   },
   "dependencies": {
-    "@mycelium-now/core": "^1.0.0",
-    "invariant": "^2.2.4",
+    "@mycelium-now/core": "^1.2.0",
     "use-deep-compare-effect": "^1.8.1"
   }
 }

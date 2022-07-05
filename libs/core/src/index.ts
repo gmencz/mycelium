@@ -1,11 +1,11 @@
+export { Client, defaults } from './client';
 export {
   AuthenticationType,
-  Client,
-  Connection,
-  TokenAuthentication,
+  SpecialEvent,
+  Situation,
   KeyAuthentication,
+  TokenAuthentication,
+  Connection,
   Channel,
-  Listener,
-} from './client';
-
-export { Situation } from './message';
+  SituationChangesListener,
+} from './types';

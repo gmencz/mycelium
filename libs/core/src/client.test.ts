@@ -1,9 +1,10 @@
 import waitForExpect from 'wait-for-expect';
 import { WebSocket } from 'ws';
-import { AuthenticationType, Client } from './client';
-import { Situation } from './message';
+import { Client } from './client';
+import { AuthenticationType, Situation } from './types';
 
-// @ts-expect-error
+// @ts-expect-error because we're assigning a library's WebSocket type to the built-in WebSocket type
+// and they're incompatible.
 global.WebSocket = WebSocket;
 
 const client = new Client({
@@ -26,16 +27,16 @@ afterAll(() => {
   client.disconnect();
 });
 
-test('subscribe, publish, unsubscribe', async () => {
+test('pub/sub', async () => {
   const channelName = 'test-channel';
   const channel = await client.getOrSubscribeToChannel(channelName);
 
   let handlerData: unknown;
-  channel.on('hello-world', (data) => {
+  channel.on<string>('hello-world', (data) => {
     handlerData = data;
   });
 
-  await channel.publish('hello-world', 'Hello, World!', true);
+  await channel.instance.publish('hello-world', 'Hello, World!', true);
 
   await waitForExpect(() => {
     expect(handlerData).not.toBeUndefined();
@@ -43,15 +44,17 @@ test('subscribe, publish, unsubscribe', async () => {
 
   expect(handlerData).toMatchInlineSnapshot(`"Hello, World!"`);
 
-  await channel.unsubscribe();
+  await channel.instance.unsubscribe();
 });
 
-test('situation_listen', async () => {
+test('channels situations', async () => {
   const channelName = 'test-channel-1';
-  const { on } = await client.getOrListenToSituationChanges('test-channel-');
+  const situationChanges = await client.getOrListenToSituationChanges(
+    'test-channel-'
+  );
 
   let occupiedChannel: unknown;
-  on(Situation.Occupied, (occupiedChannelName) => {
+  situationChanges.on(Situation.Occupied, (occupiedChannelName) => {
     occupiedChannel = occupiedChannelName;
   });
 
@@ -64,5 +67,5 @@ test('situation_listen', async () => {
   expect(occupiedChannel).toMatchInlineSnapshot(`"test-channel-1"`);
 
   await client.unlistenToSituationChanges('test-channel-');
-  await channel.unsubscribe();
+  await channel.instance.unsubscribe();
 });

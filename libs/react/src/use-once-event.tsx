@@ -1,6 +1,4 @@
-import { Channel, Listener } from '@mycelium-now/core';
-
-import invariant from 'invariant';
+import { Channel } from '@mycelium-now/core';
 import { useEffect } from 'react';
 
 /**
@@ -13,12 +11,8 @@ import { useEffect } from 'react';
 export function useOnceEvent<TData = unknown>(
   channel: Channel | undefined,
   event: string,
-  listener: Listener<TData>
+  listener: (data: TData) => void
 ) {
-  // error when required arguments aren't passed.
-  invariant(event, 'Must supply event to useOnceEvent');
-  invariant(listener, 'Must supply listener to useOnceEvent');
-
   useEffect(() => {
     if (!channel) {
       return;

@@ -1,144 +1,109 @@
 import ReconnectingWebSocket from 'reconnecting-websocket';
 import waitForExpect from 'wait-for-expect';
+import { InstanceWithEvents } from './instance-with-events';
 
 import {
+  AckDetails,
+  AuthenticationType,
+  Channel,
+  Connection,
   ErrorMessage,
   HelloMessage,
   MessageTypes,
   PublishMessage,
-  PublishSuccessMessage,
   SituationChangeMessage,
+  SituationChangesListener,
+  SpecialEvent,
   SubscribeSuccessMessage,
-  Situation,
-} from './message';
+} from './types';
 
-interface KeyAuthentication {
-  type: AuthenticationType.KEY;
-
-  /**
-   * How to get the key used to authenticate the connection. For example by simply returning it or fetching it.
-   * Don't use this authentication type in untrusted environments.
-   * ```js
-   * return "my-key-id:my-key-secret";
-   * ```
-   */
-  getKey: () => string | Promise<string>;
-}
-
-interface TokenAuthentication {
-  type: AuthenticationType.TOKEN;
-
-  /**
-   * How to get the token used to authenticate the connection. For example by fetching your API which
-   * returns the token.
-   * ```js
-   * const { token } = await fetch(MY_API_URL).then(r => r.json());
-   * return token;
-   * ```
-   */
-  getToken: () => string | Promise<string>;
-}
-
-enum AuthenticationType {
-  KEY,
-  TOKEN,
-}
-
-interface Connection {
-  authentication: KeyAuthentication | TokenAuthentication;
-  baseURL?: string;
-  manual?: boolean;
-}
-
-interface Ack {
-  failureReason?: string;
-}
-
-type SpecialEvent = 'connect' | 'disconnect';
-
-type Listener<TData> = (data: TData, event: string) => void;
-
-interface Channel {
-  name: string;
-  on: <TData = unknown>(event: string, listener: Listener<TData>) => void;
-  once: <TData = unknown>(event: string, listener: Listener<TData>) => void;
-  off: <TData>(event: string, listener: Listener<TData>) => void;
-  offOnce: <TData>(event: string, listener: Listener<TData>) => void;
-  removeAllListeners: (...events: string[]) => void;
-  onAny: <TData>(listener: Listener<TData>) => void;
-  prependAny: <TData>(listener: Listener<TData>) => void;
-  offAny: <TData>(...listeners: Listener<TData>[]) => void;
-  publish: <TData = unknown>(
-    event: string,
-    data: TData,
-    includePublisher: boolean
-  ) => Promise<void>;
-  unsubscribe: () => Promise<void>;
-}
-
-type SituationListener = (channelName: string) => void;
-
-interface SituationChangesListener {
-  prefix: string;
-  on: (situation: Situation, listener: SituationListener) => void;
-  once: (situation: Situation, listener: SituationListener) => void;
-  off: (situation: Situation, listener: SituationListener) => void;
-  offOnce: (situation: Situation, listener: SituationListener) => void;
-  removeAllListeners: (...situations: Situation[]) => void;
-  onAny: (listener: SituationListener) => void;
-  prependAny: (listener: SituationListener) => void;
-  offAny: (...listeners: SituationListener[]) => void;
-}
-
+/**
+ * Default connection options.
+ */
 const defaults = {
   baseURL: 'wss://mycelium-server.fly.dev/realtime',
 };
 
+/**
+ * Mycelium client.
+ */
 class Client {
-  private channels = new Map<
+  /**
+   * The channels the client is subscribed to.
+   */
+  private channels = new Map<string, Channel>();
+
+  /**
+   * The situation changes prefixes the client is interested in.
+   */
+  private situationChangesPrefixes = new Map<
     string,
-    {
-      instance: Channel;
-      eventListeners: { event: string; listener: Listener<any> }[];
-      anyListeners: Listener<any>[];
-      onceListeners: { event: string; listener: Listener<any> }[];
-    }
+    SituationChangesListener
   >();
 
-  private situationChangesPrefixesListeners = new Map<
-    string,
-    {
-      instance: SituationChangesListener;
-      situationListeners: {
-        situation: Situation;
-        fn: SituationListener;
-      }[];
-      situationOnceListeners: {
-        situation: Situation;
-        fn: SituationListener;
-      }[];
-      situationAnyListeners: SituationListener[];
-    }
-  >();
-
+  /**
+   * The last sequence number sent to Mycelium to be acknowledged.
+   */
   private seqNumber = 1;
-  private acks = new Map<number, Ack>();
+
+  /**
+   * The acknowledged sequence numbers along with details about the acknowledgement.
+   * For example if the message failed, the details would include the reason it failed.
+   */
+  private acks = new Map<number, AckDetails>();
+
+  /**
+   * The handlers for events of `SpecialEvent`.
+   */
   private specialEventsHandlers = new Map<SpecialEvent, VoidFunction[]>();
+
+  /**
+   * The WebSocket.
+   */
   private ws: ReconnectingWebSocket | undefined;
 
+  /**
+   * The id of the client's session.
+   */
   public sid: string | undefined;
+
+  /**
+   * Whether the client is connected (WebSocket connected and session started).
+   */
   public isConnected = false;
 
+  /**
+   * Creates a new client and connects to Mycelium unless with the options passed in `connection`.
+   * If `connection.manual` is set to true, you will have to manually connect with `Client.connect()`.
+   * @param connection The connection options.
+   */
   constructor(connection: Connection) {
     if (!connection.manual) {
       this.connect(connection);
     }
   }
 
+  /**
+   * Gets the channels the client is subscribed to.
+   */
   public getChannels() {
     return Array.from(this.channels.keys());
   }
 
+  /**
+   * Sends a WebSocket message in JSON format.
+   * @param data The data to send in JSON format.
+   */
+  private sendJSON(data: unknown) {
+    this.ws?.send(JSON.stringify(data));
+  }
+
+  /**
+   * Listens to situation changes on a prefix, for example if we want to get notified when any channel that starts
+   * with the name `user-` becomes vacant or occupied, we can listen to situation changes on the prefix `user-`.
+   * If the client is already listening on the specified prefix, the listener will be returned.
+   * @param channelPrefix The prefix to listen to situation changes on.
+   */
   public async getOrListenToSituationChanges(
     channelPrefix: string
   ): Promise<SituationChangesListener> {
@@ -148,25 +113,22 @@ class Client {
       );
     }
 
-    const existingListener =
-      this.situationChangesPrefixesListeners.get(channelPrefix);
-
+    const existingListener = this.situationChangesPrefixes.get(channelPrefix);
     if (existingListener) {
-      return existingListener.instance;
+      return existingListener;
     }
 
     const listenSeq = this.seqNumber++;
 
-    this.ws.send(
-      JSON.stringify({
-        t: MessageTypes.SituationListen,
-        d: {
-          s: listenSeq,
-          cp: channelPrefix,
-        },
-      })
-    );
+    this.sendJSON({
+      t: MessageTypes.SituationListen,
+      d: {
+        s: listenSeq,
+        cp: channelPrefix,
+      },
+    });
 
+    // Wait for the listen to be acknowledged.
     await waitForExpect(() => {
       if (!this.acks.has(listenSeq)) {
         throw new Error(
@@ -180,165 +142,19 @@ class Client {
       throw new Error(ack.failureReason);
     }
 
-    const instance: SituationChangesListener = {
-      prefix: channelPrefix,
+    const situationChangesListener: SituationChangesListener =
+      new InstanceWithEvents({
+        prefix: channelPrefix,
+      });
 
-      removeAllListeners: (...situations) => {
-        const prefix =
-          this.situationChangesPrefixesListeners.get(channelPrefix);
-
-        if (prefix) {
-          if (!situations.length) {
-            // Remove all listeners
-            this.situationChangesPrefixesListeners.set(channelPrefix, {
-              ...prefix,
-              situationListeners: [],
-            });
-
-            return;
-          }
-
-          const maxSituations = Object.keys(Situation).length;
-          if (situations.length > maxSituations) {
-            throw new Error(
-              `Too many situations for removeAllListeners, maximum ${maxSituations}`
-            );
-          }
-
-          this.situationChangesPrefixesListeners.set(channelPrefix, {
-            ...prefix,
-            situationListeners: prefix.situationListeners.filter(
-              (l) => !situations.some((s) => s === l.situation)
-            ),
-          });
-        }
-      },
-
-      onAny: (listener) => {
-        const prefix =
-          this.situationChangesPrefixesListeners.get(channelPrefix);
-
-        if (prefix) {
-          this.situationChangesPrefixesListeners.set(channelPrefix, {
-            ...prefix,
-            situationAnyListeners: [...prefix.situationAnyListeners, listener],
-          });
-        }
-      },
-
-      prependAny: (listener) => {
-        const prefix =
-          this.situationChangesPrefixesListeners.get(channelPrefix);
-
-        if (prefix) {
-          this.situationChangesPrefixesListeners.set(channelPrefix, {
-            ...prefix,
-            situationAnyListeners: [listener, ...prefix.situationAnyListeners],
-          });
-        }
-      },
-
-      off: (situation, listener) => {
-        const prefix =
-          this.situationChangesPrefixesListeners.get(channelPrefix);
-
-        if (prefix) {
-          this.situationChangesPrefixesListeners.set(channelPrefix, {
-            ...prefix,
-            situationListeners: prefix.situationListeners.filter(
-              (i) => i.situation !== situation && i.fn !== listener
-            ),
-          });
-        }
-      },
-
-      once: (situation, listener) => {
-        const prefix =
-          this.situationChangesPrefixesListeners.get(channelPrefix);
-
-        if (prefix) {
-          this.situationChangesPrefixesListeners.set(channelPrefix, {
-            ...prefix,
-            situationOnceListeners: [
-              ...prefix.situationOnceListeners.filter(
-                (l) => l.situation !== situation
-              ),
-              {
-                fn: listener,
-                situation,
-              },
-            ],
-          });
-        }
-      },
-
-      offOnce: (situation, listener) => {
-        const prefix =
-          this.situationChangesPrefixesListeners.get(channelPrefix);
-
-        if (prefix) {
-          this.situationChangesPrefixesListeners.set(channelPrefix, {
-            ...prefix,
-            situationOnceListeners: prefix.situationOnceListeners.filter(
-              (l) => l.situation !== situation && l.fn !== listener
-            ),
-          });
-        }
-      },
-
-      on: (situation: Situation, listener) => {
-        const prefix =
-          this.situationChangesPrefixesListeners.get(channelPrefix);
-
-        if (prefix) {
-          this.situationChangesPrefixesListeners.set(channelPrefix, {
-            ...prefix,
-            situationListeners: [
-              ...prefix.situationListeners,
-              {
-                fn: listener,
-                situation,
-              },
-            ],
-          });
-        }
-      },
-
-      offAny: (...listeners) => {
-        const prefix =
-          this.situationChangesPrefixesListeners.get(channelPrefix);
-
-        if (prefix) {
-          if (!listeners.length) {
-            // Remove all listeners
-            this.situationChangesPrefixesListeners.set(channelPrefix, {
-              ...prefix,
-              situationAnyListeners: [],
-            });
-
-            return;
-          }
-
-          this.situationChangesPrefixesListeners.set(channelPrefix, {
-            ...prefix,
-            situationAnyListeners: prefix.situationAnyListeners.filter(
-              (l) => !listeners.some((listener) => listener === l)
-            ),
-          });
-        }
-      },
-    };
-
-    this.situationChangesPrefixesListeners.set(channelPrefix, {
-      instance,
-      situationListeners: [],
-      situationOnceListeners: [],
-      situationAnyListeners: [],
-    });
-
-    return instance;
+    this.situationChangesPrefixes.set(channelPrefix, situationChangesListener);
+    return situationChangesListener;
   }
 
+  /**
+   * Stops listening to situation changes on the specified prefix.
+   * @param channelPrefix The prefix to stop listening to situation changes on.
+   */
   public async unlistenToSituationChanges(channelPrefix: string) {
     if (!this.isConnected || !this.ws) {
       throw new Error(
@@ -346,7 +162,7 @@ class Client {
       );
     }
 
-    if (!this.situationChangesPrefixesListeners.has(channelPrefix)) {
+    if (!this.situationChangesPrefixes.has(channelPrefix)) {
       throw new Error(
         `failed to unlisten to situation changes on prefix ${channelPrefix}, not listening`
       );
@@ -354,16 +170,15 @@ class Client {
 
     const unlistenSeq = this.seqNumber++;
 
-    this.ws.send(
-      JSON.stringify({
-        t: MessageTypes.SituationUnlisten,
-        d: {
-          s: unlistenSeq,
-          cp: channelPrefix,
-        },
-      })
-    );
+    this.sendJSON({
+      t: MessageTypes.SituationUnlisten,
+      d: {
+        s: unlistenSeq,
+        cp: channelPrefix,
+      },
+    });
 
+    // Wait for the unlisten to be acknowledged.
     await waitForExpect(() => {
       if (!this.acks.has(unlistenSeq)) {
         throw new Error(
@@ -377,9 +192,13 @@ class Client {
       throw new Error(ack.failureReason);
     }
 
-    this.situationChangesPrefixesListeners.delete(channelPrefix);
+    this.situationChangesPrefixes.delete(channelPrefix);
   }
 
+  /**
+   * Subscribes to the specified channel, if the client is already subscribed, the channel will be returned.
+   * @param channelName The name of the channel to subscribe to.
+   */
   public async getOrSubscribeToChannel(channelName: string): Promise<Channel> {
     if (!this.isConnected || !this.ws) {
       throw new Error(
@@ -389,21 +208,20 @@ class Client {
 
     const existingChannel = this.channels.get(channelName);
     if (existingChannel) {
-      return existingChannel.instance;
+      return existingChannel;
     }
 
     const subscribeSeq = this.seqNumber++;
 
-    this.ws.send(
-      JSON.stringify({
-        t: MessageTypes.Subscribe,
-        d: {
-          s: subscribeSeq,
-          c: channelName,
-        },
-      })
-    );
+    this.sendJSON({
+      t: MessageTypes.Subscribe,
+      d: {
+        s: subscribeSeq,
+        c: channelName,
+      },
+    });
 
+    // Wait for the subscription to be acknowdleged.
     await waitForExpect(() => {
       if (!this.acks.has(subscribeSeq)) {
         throw new Error(
@@ -417,7 +235,7 @@ class Client {
       throw new Error(ack.failureReason);
     }
 
-    const channel: Channel = {
+    const channel: Channel = new InstanceWithEvents({
       name: channelName,
 
       unsubscribe: async () => {
@@ -435,16 +253,15 @@ class Client {
 
         const unsubscribeSeq = this.seqNumber++;
 
-        this.ws.send(
-          JSON.stringify({
-            t: MessageTypes.Unsubscribe,
-            d: {
-              s: unsubscribeSeq,
-              c: channelName,
-            },
-          })
-        );
+        this.sendJSON({
+          t: MessageTypes.Unsubscribe,
+          d: {
+            s: unsubscribeSeq,
+            c: channelName,
+          },
+        });
 
+        // Wait for the unsubscription to be acknowdleged.
         await waitForExpect(() => {
           if (!this.acks.has(unsubscribeSeq)) {
             throw new Error(
@@ -461,130 +278,6 @@ class Client {
         this.channels.delete(channelName);
       },
 
-      off: (event, listener) => {
-        const channel = this.channels.get(channelName);
-        if (channel) {
-          this.channels.set(channelName, {
-            ...channel,
-            eventListeners: channel.eventListeners.filter(
-              (l) => l.event !== event && l.listener !== listener
-            ),
-          });
-        }
-      },
-
-      offOnce: (event, listener) => {
-        const channel = this.channels.get(channelName);
-        if (channel) {
-          this.channels.set(channelName, {
-            ...channel,
-            onceListeners: channel.onceListeners.filter(
-              (l) => l.event !== event && l.listener !== listener
-            ),
-          });
-        }
-      },
-
-      offAny: (...listeners) => {
-        const channel = this.channels.get(channelName);
-        if (channel) {
-          if (!listeners.length) {
-            // Remove all listeners
-            this.channels.set(channelName, {
-              ...channel,
-              anyListeners: [],
-            });
-
-            return;
-          }
-
-          this.channels.set(channelName, {
-            ...channel,
-            anyListeners: channel.anyListeners.filter(
-              (l) => !listeners.some((listener) => listener === l)
-            ),
-          });
-        }
-      },
-
-      on: (event, listener) => {
-        const channel = this.channels.get(channelName);
-        if (channel) {
-          this.channels.set(channelName, {
-            ...channel,
-            eventListeners: [
-              ...channel.eventListeners,
-              {
-                event,
-                listener: (data: any, event) => {
-                  listener(data, event);
-                },
-              },
-            ],
-          });
-        }
-      },
-
-      onAny: (listener) => {
-        const channel = this.channels.get(channelName);
-        if (channel) {
-          this.channels.set(channelName, {
-            ...channel,
-            anyListeners: [...channel.anyListeners, listener],
-          });
-        }
-      },
-
-      once: (event, listener) => {
-        const channel = this.channels.get(channelName);
-        if (channel) {
-          this.channels.set(channelName, {
-            ...channel,
-            onceListeners: [
-              ...channel.onceListeners.filter((l) => l.event !== event),
-              {
-                event,
-                listener: (data: any, event) => {
-                  listener(data, event);
-                },
-              },
-            ],
-          });
-        }
-      },
-
-      prependAny: (listener) => {
-        const channel = this.channels.get(channelName);
-        if (channel) {
-          this.channels.set(channelName, {
-            ...channel,
-            anyListeners: [listener, ...channel.anyListeners],
-          });
-        }
-      },
-
-      removeAllListeners: (...events) => {
-        const channel = this.channels.get(channelName);
-        if (channel) {
-          if (!events.length) {
-            // Remove all listeners
-            this.channels.set(channelName, {
-              ...channel,
-              eventListeners: [],
-            });
-
-            return;
-          }
-
-          this.channels.set(channelName, {
-            ...channel,
-            eventListeners: channel.eventListeners.filter(
-              (l) => !events.some((ev) => ev === l.event)
-            ),
-          });
-        }
-      },
-
       publish: async (event, data, includePublisher = false) => {
         if (!this.isConnected || !this.ws) {
           throw new Error(
@@ -594,19 +287,18 @@ class Client {
 
         const publishSeq = this.seqNumber++;
 
-        this.ws.send(
-          JSON.stringify({
-            t: MessageTypes.Publish,
-            d: {
-              e: event,
-              s: publishSeq,
-              c: channelName,
-              d: data,
-              ip: includePublisher,
-            },
-          })
-        );
+        this.sendJSON({
+          t: MessageTypes.Publish,
+          d: {
+            e: event,
+            s: publishSeq,
+            c: channelName,
+            d: data,
+            ip: includePublisher,
+          },
+        });
 
+        // Wait for the publish to be acknowledged.
         await waitForExpect(() => {
           if (!this.acks.has(publishSeq)) {
             throw new Error(
@@ -620,18 +312,17 @@ class Client {
           throw new Error(ack.failureReason);
         }
       },
-    };
-
-    this.channels.set(channelName, {
-      instance: channel,
-      anyListeners: [],
-      eventListeners: [],
-      onceListeners: [],
     });
 
+    this.channels.set(channelName, channel);
     return channel;
   }
 
+  /**
+   * Adds a handler to the specified special event.
+   * @param specialEvent The special event to handle.
+   * @param handler The handler.
+   */
   public on(specialEvent: SpecialEvent, handler: VoidFunction) {
     const existingHandlers = this.specialEventsHandlers.get(specialEvent) || [];
     this.specialEventsHandlers.set(specialEvent, [
@@ -640,6 +331,10 @@ class Client {
     ]);
   }
 
+  /**
+   * Runs the special events handlers.
+   * @param specialEvent The special event to run the handlers on.
+   */
   private runSpecialEventHandlers(specialEvent: SpecialEvent) {
     this.specialEventsHandlers.get(specialEvent)?.forEach((handler) => {
       handler();
@@ -656,16 +351,23 @@ class Client {
     // Reset state.
     this.acks = new Map();
     this.channels = new Map();
+    this.situationChangesPrefixes = new Map();
     this.seqNumber = 1;
     this.isConnected = false;
     this.sid = undefined;
     this.ws = undefined;
   }
 
-  public async connect({
-    authentication,
-    baseURL = defaults.baseURL,
-  }: Connection) {
+  /**
+   * Creates a WebSocket connection to Mycelium. This happens by default when instantiating a new Client
+   * unless manual mode is set.
+   * @param connection The options for the connection.
+   */
+  public async connect(
+    connection: Pick<Connection, 'authentication' | 'baseURL'>
+  ) {
+    const { authentication, baseURL } = connection;
+
     let url: string;
     if (authentication.type === AuthenticationType.KEY) {
       const key = await authentication.getKey();
@@ -679,6 +381,9 @@ class Client {
     this.setupListeners();
   }
 
+  /**
+   * Sets up the WebSocket event listeners.
+   */
   private setupListeners() {
     if (!this.ws) {
       return;
@@ -711,23 +416,7 @@ class Client {
               e: event,
             } = message.d as PublishMessage['d'];
 
-            const channel = this.channels.get(channelName);
-            if (channel) {
-              channel.eventListeners.forEach((l) => {
-                if (l.event === event) {
-                  l.listener(data, event);
-                }
-              });
-
-              channel.onceListeners
-                .find((l) => l.event === event)
-                ?.listener(data, event);
-
-              channel.anyListeners.forEach((listener) => {
-                listener(data, event);
-              });
-            }
-
+            this.channels.get(channelName)?.handleEvent(event, data);
             return;
           }
 
@@ -735,27 +424,11 @@ class Client {
             const { c: channelName, s: situation } =
               message.d as SituationChangeMessage['d'];
 
-            for (const prefix of this.situationChangesPrefixesListeners.keys()) {
+            for (const prefix of this.situationChangesPrefixes.keys()) {
               if (channelName.startsWith(prefix)) {
-                const {
-                  situationListeners,
-                  situationOnceListeners,
-                  situationAnyListeners,
-                } = this.situationChangesPrefixesListeners.get(prefix)!;
-
-                situationListeners.forEach((listener) => {
-                  if (listener.situation === situation) {
-                    listener.fn(channelName);
-                  }
-                });
-
-                situationOnceListeners
-                  .find((l) => l.situation === situation)
-                  ?.fn(channelName);
-
-                situationAnyListeners.forEach((listener) => {
-                  listener(channelName);
-                });
+                this.situationChangesPrefixes
+                  .get(prefix)!
+                  .handleEvent(situation, channelName);
               }
             }
           }
@@ -786,13 +459,4 @@ class Client {
   }
 }
 
-export {
-  Client,
-  AuthenticationType,
-  Connection,
-  TokenAuthentication,
-  KeyAuthentication,
-  Channel,
-};
-
-export type { Listener };
+export { Client, defaults };

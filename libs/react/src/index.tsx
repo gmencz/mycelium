@@ -1,17 +1,12 @@
 export { useChannel } from './use-channel';
 export { usePublishEvent } from './use-publish-event';
-export { useSubscribe } from './use-subscribe';
+export { useLazyChannel } from './use-lazy-channel';
 export { useOnEvent } from './use-on-event';
-export { useOnAnyEvent } from './use-on-any-event';
 export { useOnceEvent } from './use-once-event';
-export { usePrependAnyEvent } from './use-prepend-any-event';
 export { useMyceliumClient } from './use-mycelium-client';
+export { useSituationChangeListener } from './use-situation-change-listener';
+export { useOnSituationChange } from './use-on-situation-change';
+export { useOnceSituationChange } from './use-once-situation-change';
 export { MyceliumProvider } from './mycelium-provider';
-export { AuthenticationType, Client } from '@mycelium-now/core';
-export type {
-  Channel,
-  Connection,
-  KeyAuthentication,
-  Listener,
-  TokenAuthentication,
-} from '@mycelium-now/core';
+
+export * from '@mycelium-now/core';

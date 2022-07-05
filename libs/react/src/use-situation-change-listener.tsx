@@ -1,23 +1,28 @@
-import { Channel } from '@mycelium-now/core';
+import { SituationChangesListener } from '@mycelium-now/core';
 import { useEffect, useState } from 'react';
 import { useMyceliumClient } from './use-mycelium-client';
 
 /**
- * Subscribe to a channel.
- * @param channelName The name of the channel you want to subscribe to.
- * @returns The channel you just subscribed to.
+ * Listens to situation changes on channel prefix.
+ * @param channelPrefix The name of the channel you want to subscribe to.
+ * @returns The situation changes listener.
  *
  * @example
  * ```typescript
- * const channel = useChannel("my-channel")
- * channel.on("some-event", (data) => {
- *    // Do something with data
+ * const listener = useSituationChangeListener("user-")
+ * listener.on(Situation.Occupied, (channelName) => {
+ *    console.log(`Someone just occupied the channel ${channelName}!`)
+ * })
+ *
+ * listener.on(Situation.Vacant, (channelName) => {
+ *    console.log(`The channel ${channelName} is now vacant!`)
  * })
  * ```
  */
-export function useChannel(channelName: string) {
+export function useSituationChangeListener(channelPrefix: string) {
   const { client, isConnected } = useMyceliumClient();
-  const [channel, setChannel] = useState<Channel>();
+  const [situationChangesListener, setSituationChangesListener] =
+    useState<SituationChangesListener>();
   const [state, setState] = useState({
     isLoading: false,
     isSuccess: false,
@@ -26,7 +31,7 @@ export function useChannel(channelName: string) {
   });
 
   useEffect(() => {
-    async function _subscribe() {
+    async function _listen() {
       // Return early if there's no client or if it's not connected
       if (!client || !isConnected) {
         return;
@@ -40,7 +45,9 @@ export function useChannel(channelName: string) {
           error: null,
         });
 
-        setChannel(await client.getOrSubscribeToChannel(channelName));
+        setSituationChangesListener(
+          await client.getOrListenToSituationChanges(channelPrefix)
+        );
 
         setState({
           isLoading: false,
@@ -58,16 +65,16 @@ export function useChannel(channelName: string) {
       }
     }
 
-    _subscribe();
+    _listen();
 
     // Cleanup on unmount/re-render
     return () => {
-      channel?.instance.unsubscribe().catch(console.error);
+      client?.unlistenToSituationChanges(channelPrefix).catch(console.error);
     };
   }, [client]);
 
   return {
-    channel,
+    situationChangesListener,
     isLoading: state.isLoading,
     isSuccess: state.isSuccess,
     isError: state.isError,
