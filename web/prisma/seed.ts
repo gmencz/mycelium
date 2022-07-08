@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { hash } from "argon2";
 import { nanoid } from "nanoid";
 
 const prisma = new PrismaClient();
@@ -12,6 +13,7 @@ async function main() {
         create: {
           id: nanoid(),
           email: "yo@gabrielmendezc.com",
+          passwordHash: await hash("123456789")
         },
       },
       apiKeys: {

@@ -183,9 +183,11 @@ export default function LandingPage() {
 
               <h2 className="mt-10 text-center tracking-tight font-semibold text-white text-2xl">
                 <span className="block text-stone-300">
-                  Runs All Over The World
+                  Close To Your Users
                 </span>
-                <span className="block mt-2 text-stone-300">Pay Per Use</span>
+                <span className="block mt-2 text-stone-300">
+                  Pay Only For What You Use
+                </span>
               </h2>
 
               {!userId ? (
@@ -209,8 +211,7 @@ export default function LandingPage() {
                 Pricing
               </h2>
               <p className="text-lg text-gray-400">
-                🌔 Pay only for what you use and dynamically scale to the moon
-                🌖
+                Pay only for what you use and dynamically scale to the moon
               </p>
             </div>
 

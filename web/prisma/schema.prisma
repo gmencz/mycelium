@@ -32,11 +32,12 @@ model App {
 }
 
 model User {
-  id        String   @id @map("id")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  email     String   @unique // Email auth only
-  apps      App[]
+  id           String   @id @map("id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  apps         App[]
 
   @@map("users")
 }
