@@ -21,7 +21,7 @@ func (c *Controller) Health(ctx *gin.Context) {
 	}
 
 	// If we can make a HEAD request to ourselves, then we're good in terms of HTTP requests.
-	if _, err := http.Head("http://" + host + "/api/v1/health/live"); err != nil {
+	if _, err := http.Head("http://" + host + "/health/live"); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"message": "HEAD request to self failed",
 		})
