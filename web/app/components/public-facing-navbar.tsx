@@ -8,6 +8,7 @@ import {
 } from "@heroicons/react/outline";
 import type { ComponentProps, FunctionComponent } from "react";
 import clsx from "clsx";
+import { useScrollPosition } from "~/utils/use-scroll-position";
 
 interface NavigationItem {
   name: string;
@@ -61,8 +62,15 @@ interface PublicFacingNavbarProps {
 export default function PublicFacingNavbar({
   isLoggedIn,
 }: PublicFacingNavbarProps) {
+  const scrollPosition = useScrollPosition();
+
   return (
-    <header className="px-8 py-4 bg-white relative">
+    <header
+      className={clsx(
+        "px-8 py-4 bg-white w-full bg-opacity-80 backdrop-blur-sm fixed top-0 z-10",
+        scrollPosition > 0 && "border-b border-gray-300"
+      )}
+    >
       <div className="max-w-6xl w-full mx-auto flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 text-black">
           <img src="/logo.svg" alt="" className="h-7 w-7" />

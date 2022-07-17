@@ -4,48 +4,117 @@ import { json } from "@remix-run/node";
 import TypeAnimation from "react-type-animation";
 import { getUserId } from "~/utils/session.server";
 import PublicFacingNavbar from "~/components/public-facing-navbar";
-
-const pricingPlans = [
-  {
-    name: "Free",
-    details:
-      "Perfect for proof of concepts, development, MVPs and personal projects (no credit card required).",
-    features: {
-      monthlyPeakConnections: "1K",
-      monthlyMaxMessages: "1M",
-      developersSupport: false,
-      restAPI: true,
-      appsPerAccount: "3",
-    },
-  },
-  {
-    name: "Pay as you go",
-    details: "$2.99 per 1M messages, $4.99 per 1K peak connections.",
-    features: {
-      monthlyPeakConnections: "Unlimited",
-      monthlyMaxMessages: "Unlimited",
-      developersSupport: true,
-      restAPI: true,
-      appsPerAccount: "Unlimited",
-    },
-  },
-];
+import { Tab } from "@headlessui/react";
+import { Fragment } from "react";
+import clsx from "clsx";
+import { CodeBlock } from "~/components/code-block";
 
 const exampleUseCasesSequenceDelay = 2000;
 
 const exampleUseCasesSequence = [
-  "in-app chats",
+  "chats",
   exampleUseCasesSequenceDelay,
   "multiplayer games",
   exampleUseCasesSequenceDelay,
-  "real-time charts",
+  "live charts",
   exampleUseCasesSequenceDelay,
-  "food delivery",
+  "GPS",
   exampleUseCasesSequenceDelay,
-  "virtual events",
+  "IoT",
   exampleUseCasesSequenceDelay,
   "notifications",
+  exampleUseCasesSequenceDelay,
 ];
+
+const exampleUseCases = {
+  gps: {
+    name: "GPS",
+    image: "",
+    technologies: [
+      {
+        name: "Node.js & Web",
+        subscribeCode: `
+const driver = await mycelium.getOrSubscribeToChannel('driver:james');
+driver.on("position-changed", position => {
+  map.updateDriver({
+    driver: "james",
+    position: [position.lat, position.long],
+  });
+})
+        `,
+        publishCode: `
+driver.instance.publish("position-changed", { lat, long });
+        `,
+      },
+    ],
+  },
+
+  chats: {
+    name: "Chats",
+    technologies: [
+      {
+        name: "Node.js & Web",
+        subscribeCode: `
+// Subscribe to the room channel which is being used to send messages, 
+// inform of who is typing, etc.
+const room = await mycelium.getOrSubscribeToChannel("room-fitness");
+
+// Subscribe each user to a corresponding channel based on their username. This decouples
+// the concept of which users are present in the room's channel from the room's channel 
+// being used to send data.
+await mycelium.getOrSubscribeToChannel("room-fitness-axel");
+
+// Get notified when a channel whose name starts with "room-fitness-" becomes
+// empty or occupied. This allows us to know which users are present in the room.
+const roomUsersChannels = await client.getOrListenToSituationChanges(
+  'room-fitness-'
+);
+
+roomUsersChannels.on(Situation.Occupied, (occupiedChannelName) => {
+  // occupiedChannelName: room-fitness-<username>
+  const username = occupiedChannelName.split("-").pop();
+  ui.showUserJoined(username);
+});
+
+roomUsersChannels.on(Situation.Vacant, (occupiedChannelName) => {
+  // occupiedChannelName: room-fitness-<username>
+  const username = occupiedChannelName.split("-").pop();
+  ui.showUserLeft(username);
+});
+
+room.on("msg", msg => {
+  ui.appendToConversation(msg);
+});
+        `,
+
+        publishCode: `
+room.instance.publish("msg", { user: "james", message: "Can anyone recommend a fitness program?" });
+      `,
+      },
+    ],
+
+    image: "",
+  },
+
+  liveCharts: {
+    name: "Live Charts",
+    image: "",
+    technologies: [
+      {
+        name: "Node.js & Web",
+        subscribeCode: `
+const euro = await mycelium.getOrSubscribeToChannel('newcoin:euro');
+euro.on("rate", data => {
+  chart.update(data);
+});
+        `,
+        publishCode: `
+euro.instance.publish("rate", { price, time: pricedAt });
+        `,
+      },
+    ],
+  },
+};
 
 export async function loader({ request }: LoaderArgs) {
   const userId = await getUserId(request);
@@ -59,11 +128,11 @@ export default function LandingPage() {
     <div className="relative h-full">
       <PublicFacingNavbar isLoggedIn={data.isLoggedIn} />
 
-      <div className="px-8 max-w-6xl w-full mx-auto mt-24 flex flex-col items-center">
+      <div className="px-8 max-w-6xl w-full mx-auto mt-32 flex flex-col items-center">
         <h1 className="flex flex-col justify-center items-center text-black font-black text-8xl gap-1">
           <span>Real-time</span>
           <span>Platform</span>
-          <span className="text-[#D3F5F9] bg-black px-6 py-4 rounded">
+          <span className="text-[#DFFCFF] bg-black px-6 py-4 rounded">
             For The Edge
           </span>
         </h1>
@@ -82,18 +151,203 @@ export default function LandingPage() {
         {data.isLoggedIn ? (
           <Link
             to="/dashboard"
-            className="mt-4 text-base text-black font-extrabold bg-[#D3F5F9] py-2.5 px-6 rounded ring-2 ring-black"
+            className="mt-4 text-base text-black font-extrabold bg-[#DFFCFF] py-2.5 px-6 rounded ring-2 ring-black"
           >
             Dashboard
           </Link>
         ) : (
           <Link
             to="/sign-up"
-            className="mt-4 text-base text-black font-extrabold bg-[#D3F5F9] py-2.5 px-6 rounded ring-2 ring-black"
+            className="mt-4 text-base text-black font-extrabold bg-[#DFFCFF] py-2.5 px-6 rounded ring-2 ring-black"
           >
             Start free now
           </Link>
         )}
+      </div>
+
+      <div className="relative overflow-hidden mt-20">
+        <div
+          style={{
+            position: "absolute",
+            width: "3000px",
+            height: "1400px",
+            zIndex: "-1",
+            left: "calc(50% - 3000px / 2)",
+            top: "10px",
+            background: "linear-gradient(#000, #DFFCFF)",
+            borderRadius: "100%",
+          }}
+        />
+
+        <div className="pb-8">
+          <div className="max-w-7xl w-full px-8 mx-auto">
+            <ExampleUseCasesWithCode />
+          </div>
+        </div>
+
+        <div className="mt-20">
+          {/* <p>
+            Lorem ipsum dolor sit amet consectetur adipisicing elit. Ipsum animi
+            dolores delectus? Facere excepturi suscipit alias nisi veniam. Quas
+            necessitatibus eius exercitationem blanditiis quisquam alias
+            inventore! Id cumque nesciunt nisi.
+          </p> */}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const topTabClassName = "p-6 text-white rounded-tl rounded-tr font-medium";
+
+function ExampleUseCasesWithCode() {
+  return (
+    <div className="max-w-4xl">
+      <div className="rounded bg-black">
+        <Tab.Group>
+          <Tab.List className="bg-[#252F30] rounded-tr rounded-tl">
+            {Object.keys(exampleUseCases).map((exampleUseCase) => (
+              <Tab key={exampleUseCase} as={Fragment}>
+                {({ selected }) => (
+                  <button
+                    className={clsx(topTabClassName, selected && "bg-black")}
+                  >
+                    {
+                      exampleUseCases[
+                        exampleUseCase as keyof typeof exampleUseCases
+                      ].name
+                    }
+                  </button>
+                )}
+              </Tab>
+            ))}
+
+            {/* {[
+              "Chats",
+              "Multiplayer Games",
+              "Live Charts",
+              "GPS",
+              "IoT",
+              "Notifications",
+              "Other",
+            ].map((useCase) => (
+              <Tab key={useCase} as={Fragment}>
+                {({ selected }) => (
+                  <button
+                    className={clsx(topTabClassName, selected && "bg-black")}
+                  >
+                    {useCase}
+                  </button>
+                )}
+              </Tab>
+            ))} */}
+          </Tab.List>
+
+          <Tab.Panels className="text-white p-6">
+            {Object.keys(exampleUseCases).map((exampleUseCase) => (
+              <Tab.Panel key={exampleUseCase} className="flex flex-col gap-4">
+                <Tab.Group>
+                  <div className="bg-white rounded text-black">
+                    <div className="flex items-center gap-20 border-b px-6 py-4 border-b-gray-300">
+                      <span className="uppercase tracking-widest font-semibold">
+                        Publish
+                      </span>
+
+                      <Tab.List className="ml-auto flex gap-2">
+                        {exampleUseCases[
+                          exampleUseCase as keyof typeof exampleUseCases
+                        ].technologies.map((tech) => (
+                          <Tab key={tech.name + "-publish-techs"} as={Fragment}>
+                            {({ selected }) => (
+                              <button
+                                className={clsx(
+                                  "font-semibold py-2 px-4 text-sm rounded",
+                                  selected &&
+                                    "bg-[#252F30] text-white ring-1 ring-black"
+                                )}
+                              >
+                                {tech.name}
+                              </button>
+                            )}
+                          </Tab>
+                        ))}
+                      </Tab.List>
+                    </div>
+
+                    <div className="px-6 py-4">
+                      {exampleUseCases[
+                        exampleUseCase as keyof typeof exampleUseCases
+                      ].technologies.map((tech) => (
+                        <Tab.Panel key={tech.name + "-publish"}>
+                          <CodeBlock
+                            language="typescript"
+                            code={tech.publishCode}
+                          />
+                        </Tab.Panel>
+                      ))}
+                    </div>
+                  </div>
+                </Tab.Group>
+
+                <Tab.Group>
+                  <div className="bg-white rounded text-black">
+                    <div className="flex items-center gap-20 border-b px-6 py-4 border-b-gray-300">
+                      <span className="uppercase tracking-widest font-semibold">
+                        Subscribe
+                      </span>
+
+                      <Tab.List className="ml-auto flex gap-2">
+                        {exampleUseCases[
+                          exampleUseCase as keyof typeof exampleUseCases
+                        ].technologies.map((tech) => (
+                          <Tab
+                            key={tech.name + "-subscribe-techs"}
+                            as={Fragment}
+                          >
+                            {({ selected }) => (
+                              <button
+                                className={clsx(
+                                  "font-semibold py-2 px-4 text-sm rounded",
+                                  selected &&
+                                    "bg-[#252F30] text-white ring-1 ring-black"
+                                )}
+                              >
+                                {tech.name}
+                              </button>
+                            )}
+                          </Tab>
+                        ))}
+                      </Tab.List>
+                    </div>
+
+                    <div className="px-6 py-4">
+                      {exampleUseCases[
+                        exampleUseCase as keyof typeof exampleUseCases
+                      ].technologies.map((tech) => (
+                        <Tab.Panel key={tech.name + "-subscribe"}>
+                          <CodeBlock
+                            language="typescript"
+                            code={tech.subscribeCode}
+                          />
+                        </Tab.Panel>
+                      ))}
+                    </div>
+                  </div>
+                </Tab.Group>
+              </Tab.Panel>
+            ))}
+
+            <Tab.Panel>Content 2</Tab.Panel>
+
+            <Tab.Panel>Content 3</Tab.Panel>
+
+            <Tab.Panel>Content 4</Tab.Panel>
+
+            <Tab.Panel>Content 5</Tab.Panel>
+
+            <Tab.Panel>Content 6</Tab.Panel>
+          </Tab.Panels>
+        </Tab.Group>
       </div>
     </div>
   );
