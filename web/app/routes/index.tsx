@@ -29,21 +29,19 @@ const exampleUseCasesSequence = [
 const exampleUseCases = {
   gps: {
     name: "GPS",
-    image: "",
+    image: "/gps.png",
     technologies: [
       {
         name: "Node.js & Web",
         subscribeCode: `
-const driver = await mycelium.getOrSubscribeToChannel('driver:james');
-driver.on("position-changed", position => {
-  map.updateDriver({
-    driver: "james",
-    position: [position.lat, position.long],
-  });
+const drivers = await mycelium.getOrSubscribeToChannel('drivers');
+drivers.on("position-changed", data => {
+  map.update(data);
 })
         `,
         publishCode: `
-driver.instance.publish("position-changed", { lat, long });
+const channel = drivers.instance;
+channel.publish("position-changed", { lat, long, driver: "james" });
         `,
       },
     ],
@@ -93,7 +91,7 @@ room.instance.publish("msg", { user: "james", message: "Can anyone recommend a f
       },
     ],
 
-    image: "",
+    image: "/chat.png",
   },
 
   liveCharts: {
@@ -165,33 +163,29 @@ export default function LandingPage() {
         )}
       </div>
 
-      <div className="relative overflow-hidden mt-20">
-        <div
-          style={{
-            position: "absolute",
-            width: "3000px",
-            height: "1400px",
-            zIndex: "-1",
-            left: "calc(50% - 3000px / 2)",
-            top: "10px",
-            background: "linear-gradient(#000, #DFFCFF)",
-            borderRadius: "100%",
-          }}
-        />
+      <div className="relative mt-52">
+        <div className="overflow-hidden absolute w-full h-full inset-0">
+          <div
+            className="absolute top-10 w-[3500px] overflow-hidden h-[1400px] bg-gradient-to-b from-black to-[#DFFCFF] -z-20 rounded-t-full"
+            style={{
+              left: "calc(50% - 3500px / 2)",
+            }}
+          />
+        </div>
 
         <div className="pb-8">
-          <div className="max-w-7xl w-full px-8 mx-auto">
+          <div className="max-w-7xl w-full px-8 mx-auto relative">
             <ExampleUseCasesWithCode />
           </div>
         </div>
 
-        <div className="mt-20">
-          {/* <p>
+        <div className="mt-20 max-w-7xl w-full px-8 pb-24 mx-auto text-white font-medium">
+          <p>
             Lorem ipsum dolor sit amet consectetur adipisicing elit. Ipsum animi
             dolores delectus? Facere excepturi suscipit alias nisi veniam. Quas
             necessitatibus eius exercitationem blanditiis quisquam alias
             inventore! Id cumque nesciunt nisi.
-          </p> */}
+          </p>
         </div>
       </div>
     </div>
@@ -202,7 +196,7 @@ const topTabClassName = "p-6 text-white rounded-tl rounded-tr font-medium";
 
 function ExampleUseCasesWithCode() {
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-2xl">
       <div className="rounded bg-black">
         <Tab.Group>
           <Tab.List className="bg-[#252F30] rounded-tr rounded-tl">
@@ -221,26 +215,6 @@ function ExampleUseCasesWithCode() {
                 )}
               </Tab>
             ))}
-
-            {/* {[
-              "Chats",
-              "Multiplayer Games",
-              "Live Charts",
-              "GPS",
-              "IoT",
-              "Notifications",
-              "Other",
-            ].map((useCase) => (
-              <Tab key={useCase} as={Fragment}>
-                {({ selected }) => (
-                  <button
-                    className={clsx(topTabClassName, selected && "bg-black")}
-                  >
-                    {useCase}
-                  </button>
-                )}
-              </Tab>
-            ))} */}
           </Tab.List>
 
           <Tab.Panels className="text-white p-6">
@@ -334,6 +308,19 @@ function ExampleUseCasesWithCode() {
                     </div>
                   </div>
                 </Tab.Group>
+
+                {exampleUseCases[exampleUseCase as keyof typeof exampleUseCases]
+                  .image ? (
+                  <img
+                    className="absolute -z-10 -top-28 right-8 max-w-full w-[660px] rounded ring-2 ring-black"
+                    src={
+                      exampleUseCases[
+                        exampleUseCase as keyof typeof exampleUseCases
+                      ].image
+                    }
+                    alt=""
+                  />
+                ) : null}
               </Tab.Panel>
             ))}
 
