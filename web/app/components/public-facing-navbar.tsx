@@ -1,14 +1,8 @@
 import { Link } from "@remix-run/react";
 import { Menu } from "@headlessui/react";
-import {
-  ChevronDownIcon,
-  CloudIcon,
-  CodeIcon,
-  TrendingUpIcon,
-} from "@heroicons/react/outline";
+import { ChevronDownIcon } from "@heroicons/react/outline";
 import type { ComponentProps, FunctionComponent } from "react";
 import clsx from "clsx";
-import { useScrollPosition } from "~/utils/use-scroll-position";
 
 interface NavigationItem {
   name: string;
@@ -22,29 +16,6 @@ interface NavigationItem {
 }
 
 const navigationItems: NavigationItem[] = [
-  {
-    name: "Features",
-    dropdownItems: [
-      {
-        name: "Edge Pub/Sub",
-        description: "Power any real-time experience.",
-        Icon: CloudIcon,
-        href: "/features/edge-pubsub",
-      },
-      {
-        name: "SDKs",
-        description: "Start building with our SDKs.",
-        Icon: CodeIcon,
-        href: "/features/sdks",
-      },
-      {
-        name: "Analytics",
-        description: "Real-time insights into your products.",
-        Icon: TrendingUpIcon,
-        href: "/features/analytics",
-      },
-    ],
-  },
   {
     name: "Pricing",
     href: "/pricing",
@@ -62,15 +33,8 @@ interface PublicFacingNavbarProps {
 export default function PublicFacingNavbar({
   isLoggedIn,
 }: PublicFacingNavbarProps) {
-  const scrollPosition = useScrollPosition();
-
   return (
-    <header
-      className={clsx(
-        "px-8 py-4 bg-white w-full bg-opacity-80 backdrop-blur-sm fixed top-0 z-10",
-        scrollPosition > 0 && "border-b border-gray-300"
-      )}
-    >
+    <header>
       <div className="max-w-6xl w-full mx-auto flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 text-black">
           <img src="/logo.svg" alt="" className="h-7 w-7" />
@@ -78,7 +42,7 @@ export default function PublicFacingNavbar({
         </Link>
 
         {/* Navigation */}
-        <nav>
+        <nav className="hidden md:block">
           <ul className="flex gap-8 items-center">
             {navigationItems.map((navigationItem) =>
               navigationItem.dropdownItems ? (
@@ -122,7 +86,10 @@ export default function PublicFacingNavbar({
                   </Menu.Items>
                 </Menu>
               ) : (
-                <li key={navigationItem.name} className="text-sm text-gray-700">
+                <li
+                  key={navigationItem.name}
+                  className="text-sm font-medium text-gray-800 hover:text-black"
+                >
                   <Link to={navigationItem.href!}>{navigationItem.name}</Link>
                 </li>
               )
@@ -131,7 +98,7 @@ export default function PublicFacingNavbar({
         </nav>
 
         {/* Dashboard/Auth */}
-        <div>
+        <div className="hidden md:block">
           {isLoggedIn ? (
             <>
               <Link to="/dashboard">Dashboard</Link>
@@ -146,10 +113,10 @@ export default function PublicFacingNavbar({
               </Link>
 
               <Link
-                to="/sign-up"
+                to="/request-beta-access"
                 className="text-sm text-white font-bold bg-black py-2.5 px-6 rounded ring-2 ring-black"
               >
-                Sign Up
+                Request Beta Access
               </Link>
             </div>
           )}

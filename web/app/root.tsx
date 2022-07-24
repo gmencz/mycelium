@@ -13,7 +13,7 @@ export const links: LinksFunction = () => [{ rel: "stylesheet", href: styles }];
 
 export const meta: MetaFunction = () => ({
   charset: "utf-8",
-  title: "Real-time platform for the edge – Mycelium",
+  title: "Build Fast and Reliable Real-time Experiences – Mycelium",
   viewport: "width=device-width,initial-scale=1",
 });
 
