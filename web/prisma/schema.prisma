@@ -41,3 +41,13 @@ model User {
 
   @@map("users")
 }
+
+model BetaAccessRequests {
+  id         String   @id @map("id")
+  email      String   @unique
+  usagePlans String   @map("usage_plans")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("beta_access_requests")
+}

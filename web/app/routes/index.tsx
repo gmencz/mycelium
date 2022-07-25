@@ -40,7 +40,7 @@ export default function LandingPage() {
 
           <Link
             to="/request-beta-access"
-            className="text-center rounded bg-gradient-to-r from-red-500 via-yellow-500 to-blue-400 py-4 px-8 font-bold w-full"
+            className="text-center rounded bg-gradient-to-r from-red-500 via-yellow-500 to-blue-400 py-4 px-8 font-bold w-full transition-transform hover:opacity-90"
           >
             Request Beta Access
           </Link>
