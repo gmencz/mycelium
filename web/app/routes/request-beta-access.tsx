@@ -180,7 +180,7 @@ export default function RequestBetaAccess() {
                     aria-invalid={Boolean(actionData?.fieldsErrors?.email)}
                     aria-errormessage={
                       actionData?.fieldsErrors?.email
-                        ? "usage-plans-error"
+                        ? "email-error"
                         : undefined
                     }
                   />

@@ -1,19 +1,90 @@
-import type { LoaderArgs } from "@remix-run/node";
+import type { ActionArgs, LoaderArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { redirect } from "@remix-run/node";
-import { Form, Link } from "@remix-run/react";
+import { Form, Link, useActionData } from "@remix-run/react";
+import { verify } from "~/utils/argon.server";
+import { z } from "zod";
 import PublicFacingNavbar from "~/components/public-facing-navbar";
-import { getUserId } from "~/utils/session.server";
+import { validateFormData } from "~/utils/actions";
+import { db } from "~/utils/db.server";
+import { createUserSession, getUserId } from "~/utils/session.server";
+
+interface ActionData {
+  fieldsErrors?: {
+    email?: string;
+    password?: string;
+  };
+
+  formError?: string;
+}
+
+const schema = z.object({
+  email: z.string().email("That email is not valid"),
+  password: z.string().min(6, "Password must be at least 6 characters long"),
+  remember: z.string().optional(),
+});
+
+type ActionInput = z.TypeOf<typeof schema>;
+
+export async function action({ request }: ActionArgs) {
+  const { formData, errors } = await validateFormData<ActionInput>({
+    request,
+    schema,
+  });
+
+  if (errors) {
+    return json<ActionData>(
+      {
+        fieldsErrors: {
+          email: errors.email,
+          password: errors.password,
+        },
+      },
+      { status: 400 }
+    );
+  }
+
+  const { email, password, remember } = formData;
+  const user = await db.user.findUnique({
+    where: {
+      email,
+    },
+    select: {
+      id: true,
+      passwordHash: true,
+    },
+  });
+
+  if (!user) {
+    return json<ActionData>(
+      { formError: "Invalid email or password" },
+      { status: 401 }
+    );
+  }
+
+  const isValidPassword = await verify(user.passwordHash, password);
+  if (!isValidPassword) {
+    return json<ActionData>(
+      { formError: "Invalid email or password" },
+      { status: 400 }
+    );
+  }
+
+  return createUserSession(user.id, "/dashboard", !!remember);
+}
 
 export async function loader({ request }: LoaderArgs) {
   const userId = await getUserId(request);
   if (userId) {
-    return redirect("/");
+    return redirect("/dashboard");
   }
 
   return null;
 }
 
 export default function LogIn() {
+  const actionData = useActionData<ActionData>();
+
   return (
     <div className="relative flex flex-col h-full p-8">
       <PublicFacingNavbar isLoggedIn={false} />
@@ -44,14 +115,24 @@ export default function LogIn() {
                     id="email"
                     placeholder="you@example.com"
                     className="py-3 px-4 block w-full shadow-sm text-black focus:ring-black focus:border-black border-warm-gray-300 rounded-md"
-                    // aria-invalid={Boolean(actionData?.fieldsErrors?.email)}
-                    // aria-errormessage={
-                    //   actionData?.fieldsErrors?.email
-                    //     ? "usage-plans-error"
-                    //     : undefined
-                    // }
+                    aria-invalid={Boolean(actionData?.fieldsErrors?.email)}
+                    aria-errormessage={
+                      actionData?.fieldsErrors?.email
+                        ? "usage-plans-error"
+                        : undefined
+                    }
                   />
                 </div>
+
+                {actionData?.fieldsErrors?.email ? (
+                  <p
+                    className="mt-2 text-sm text-red-500 font-medium"
+                    role="alert"
+                    id="email-error"
+                  >
+                    {actionData.fieldsErrors.email}
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-1">
@@ -67,26 +148,36 @@ export default function LogIn() {
                     name="password"
                     id="email"
                     className="py-3 px-4 block w-full shadow-sm text-black focus:ring-black focus:border-black border-warm-gray-300 rounded-md"
-                    // aria-invalid={Boolean(actionData?.fieldsErrors?.email)}
-                    // aria-errormessage={
-                    //   actionData?.fieldsErrors?.email
-                    //     ? "usage-plans-error"
-                    //     : undefined
-                    // }
+                    aria-invalid={Boolean(actionData?.fieldsErrors?.password)}
+                    aria-errormessage={
+                      actionData?.fieldsErrors?.password
+                        ? "password-error"
+                        : undefined
+                    }
                   />
                 </div>
+
+                {actionData?.fieldsErrors?.password ? (
+                  <p
+                    className="mt-2 text-sm text-red-500 font-medium"
+                    role="alert"
+                    id="password-error"
+                  >
+                    {actionData.fieldsErrors.password}
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <input
-                    id="remember-me"
-                    name="remember-me"
+                    id="remember"
+                    name="remember"
                     type="checkbox"
                     className="h-4 w-4 text-black focus:ring-black border-gray-300 rounded"
                   />
                   <label
-                    htmlFor="remember-me"
+                    htmlFor="remember"
                     className="ml-2 block text-sm text-black"
                   >
                     Remember me
@@ -104,6 +195,17 @@ export default function LogIn() {
               </div>
 
               <div>
+                <div className="mb-2">
+                  {actionData?.formError ? (
+                    <p
+                      className="text-sm text-red-500 font-medium"
+                      role="alert"
+                    >
+                      {actionData.formError}
+                    </p>
+                  ) : null}
+                </div>
+
                 <button
                   type="submit"
                   className="mt-2 w-full inline-flex items-center justify-center px-6 py-3 border border-transparent rounded shadow-sm text-base font-semibold text-white bg-black ring-2 ring-black hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"

@@ -8,24 +8,26 @@ if (!sessionSecret) {
 const storage = createCookieSessionStorage({
   cookie: {
     name: "mycelium_session",
-    // normally you want this to be `secure: true`
-    // but that doesn't work on localhost for Safari
-    // https://web.dev/when-to-use-local-https/
     secure: process.env.NODE_ENV === "production",
     secrets: [sessionSecret],
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
     httpOnly: true,
   },
 });
 
-export async function createUserSession(userId: string, redirectTo: string) {
+export async function createUserSession(
+  userId: string,
+  redirectTo: string,
+  remember: boolean = true
+) {
   const session = await storage.getSession();
   session.set("userId", userId);
   return redirect(redirectTo, {
     headers: {
-      "Set-Cookie": await storage.commitSession(session),
+      "Set-Cookie": await storage.commitSession(session, {
+        maxAge: remember ? 60 * 60 * 24 * 30 : undefined,
+      }),
     },
   });
 }
