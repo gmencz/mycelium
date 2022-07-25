@@ -34,7 +34,7 @@ export default function RequestBetaAccessSuccess() {
 
         <img
           className="mt-16 w-full max-w-md"
-          src="/beta_thank_you.svg"
+          src="/beta-thank-you.svg"
           alt=""
         />
       </div>
