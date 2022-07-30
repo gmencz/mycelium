@@ -1,10 +1,45 @@
+import type { LoaderArgs } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
+import { Outlet, useLoaderData } from "@remix-run/react";
+import DashboardNavbar from "~/components/dashboard-navbar";
+import { db } from "~/utils/db.server";
+import { logout, getUserId } from "~/utils/session.server";
+
+export async function loader({ request }: LoaderArgs) {
+  const userId = await getUserId(request);
+  if (!userId) {
+    return redirect("/log-in");
+  }
+
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      email: true,
+    },
+  });
+
+  if (!user) {
+    return logout(request);
+  }
+
+  const userDetails = {
+    username: user.email.split("@")[0],
+  };
+
+  return json({ userDetails });
+}
+
 export default function Dashboard() {
+  const { userDetails } = useLoaderData<typeof loader>();
+
   return (
-    <div className="relative flex flex-col h-full p-8">
-      <div className="max-w-6xl w-full mx-auto mt-8">
-        <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
-          Dashboard
-        </h1>
+    <div className="relative h-full bg-white">
+      <DashboardNavbar username={userDetails.username} />
+
+      <div className="mt-6 px-8">
+        <div className="max-w-6xl w-full mx-auto">
+          <Outlet />
+        </div>
       </div>
     </div>
   );

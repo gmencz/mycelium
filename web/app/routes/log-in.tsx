@@ -70,13 +70,13 @@ export async function action({ request }: ActionArgs) {
     );
   }
 
-  return createUserSession(user.id, "/dashboard", !!remember);
+  return createUserSession(user.id, "/dashboard/apps", !!remember);
 }
 
 export async function loader({ request }: LoaderArgs) {
   const userId = await getUserId(request);
   if (userId) {
-    return redirect("/dashboard");
+    return redirect("/dashboard/apps");
   }
 
   return null;
@@ -95,7 +95,7 @@ export default function LogIn() {
         </div>
 
         <div className="flex-1 flex flex-col flex-shrink-0">
-          <h1 className="mt-6 text-4xl font-extrabold text-black">
+          <h1 className="mt-6 text-4xl font-extrabold tracking-tight text-black sm:text-5xl">
             Log in to your account
           </h1>
 
@@ -210,7 +210,7 @@ export default function LogIn() {
                   type="submit"
                   className="mt-2 w-full inline-flex items-center justify-center px-6 py-3 border border-transparent rounded shadow-sm text-base font-semibold text-white bg-black ring-2 ring-black hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
                 >
-                  Request Access
+                  Continue
                 </button>
               </div>
             </Form>

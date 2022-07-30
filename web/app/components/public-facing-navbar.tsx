@@ -156,8 +156,8 @@ export default function PublicFacingNavbar({
           {isLoggedIn ? (
             <>
               <Link
-                to="/dashboard"
-                className="text-sm text-white font-bold bg-black py-2.5 px-6 rounded ring-2 ring-black"
+                to="/dashboard/apps"
+                className="text-sm text-white font-bold bg-black py-2 px-6 rounded ring-2 ring-black hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
               >
                 Dashboard
               </Link>
@@ -166,14 +166,14 @@ export default function PublicFacingNavbar({
             <div className="flex gap-6">
               <Link
                 to="/log-in"
-                className="text-sm text-black font-extrabold bg-white py-2.5 px-6 rounded ring-2 ring-black hover:bg-gray-200"
+                className="text-sm text-black font-extrabold bg-white py-2 px-6 rounded ring-2 ring-black hover:bg-gray-200"
               >
                 Log in
               </Link>
 
               <Link
                 to="/request-beta-access"
-                className="text-sm text-white font-bold bg-black py-2.5 px-6 rounded ring-2 ring-black hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
+                className="text-sm text-white font-bold bg-black py-2 px-6 rounded ring-2 ring-black hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
               >
                 Request Beta Access
               </Link>

@@ -39,10 +39,10 @@ export default function LandingPage() {
           </p>
 
           <Link
-            to="/request-beta-access"
+            to={data.isLoggedIn ? "/dashboard" : "/request-beta-access"}
             className="text-center rounded bg-gradient-to-r from-red-500 via-yellow-500 to-blue-400 py-4 px-8 font-bold w-full transition-transform hover:opacity-90"
           >
-            Request Beta Access
+            {data.isLoggedIn ? "Go to dashboard" : "Request Beta Access"}
           </Link>
         </div>
 
