@@ -13,12 +13,13 @@ async function main() {
         create: {
           id: nanoid(),
           email: "yo@gabrielmendezc.com",
-          passwordHash: await hash("123456789")
+          passwordHash: await hash("123456789"),
         },
       },
       apiKeys: {
         create: {
           id: nanoid(),
+          name: "Admin API Key",
           secret: nanoid(32),
           capabilities: {
             "*": "*",

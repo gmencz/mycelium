@@ -57,6 +57,7 @@ export async function loader({ request }: LoaderArgs) {
 
 export default function DashboardApps() {
   const data = useLoaderData<typeof loader>();
+  console.log(data);
 
   return (
     <div>
@@ -81,7 +82,7 @@ export default function DashboardApps() {
             </div>
             <div className="flex-1 flex items-center justify-between border-t border-r border-b border-gray-200 bg-white rounded-r-md truncate">
               <Link
-                to={app.id}
+                to={`apps/${app.id}`}
                 className="text-gray-900 font-medium hover:text-gray-600 flex-1 px-4 py-2 text-sm truncate"
               >
                 {app.name}

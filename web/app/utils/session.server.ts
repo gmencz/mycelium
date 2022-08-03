@@ -16,6 +16,15 @@ const storage = createCookieSessionStorage({
   },
 });
 
+export async function requireUserSession(request: Request) {
+  const userId = await getUserId(request);
+  if (!userId) {
+    throw redirect("/log-in");
+  }
+
+  return userId;
+}
+
 export async function logout(request: Request) {
   const session = await getUserSession(request);
   return redirect("/log-in", {

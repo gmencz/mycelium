@@ -1,15 +1,12 @@
 import type { LoaderArgs } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { Outlet, useLoaderData } from "@remix-run/react";
 import DashboardNavbar from "~/components/dashboard-navbar";
 import { db } from "~/utils/db.server";
-import { logout, getUserId } from "~/utils/session.server";
+import { logout, requireUserSession } from "~/utils/session.server";
 
 export async function loader({ request }: LoaderArgs) {
-  const userId = await getUserId(request);
-  if (!userId) {
-    return redirect("/log-in");
-  }
+  const userId = await requireUserSession(request);
 
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -33,7 +30,7 @@ export default function Dashboard() {
   const { userDetails } = useLoaderData<typeof loader>();
 
   return (
-    <div className="relative h-full bg-white">
+    <div className="relative h-full bg-gray-100">
       <DashboardNavbar username={userDetails.username} />
 
       <div className="mt-6 px-8">

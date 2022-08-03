@@ -5,11 +5,11 @@ interface DashboardNavbarProps {
   username: string;
 }
 
-const navigationItems = [{ name: "Apps", href: "/dashboard/apps" }];
+const navigationItems = [{ name: "Apps", to: "/dashboard", end: true }];
 
 export default function DashboardNavbar({ username }: DashboardNavbarProps) {
   return (
-    <div className="border-b border-gray-400 pt-4 px-8 bg-gray-100 bg-opacity-75">
+    <div className="border-b border-gray-300 pt-4 px-8 bg-white bg-opacity-75">
       <div className="flex flex-col gap-4 max-w-6xl w-full mx-auto">
         <div className="flex items-center gap-12 justify-between">
           <div className="flex items-center gap-2">
@@ -49,7 +49,8 @@ export default function DashboardNavbar({ username }: DashboardNavbarProps) {
           {navigationItems.map((navigationItem) => (
             <li key={navigationItem.name}>
               <NavLink
-                to={navigationItem.href}
+                to={navigationItem.to}
+                end={navigationItem.end}
                 className={({ isActive }) =>
                   clsx("font-medium", isActive ? "text-black" : "text-gray-500")
                 }

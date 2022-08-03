@@ -70,13 +70,13 @@ export async function action({ request }: ActionArgs) {
     );
   }
 
-  return createUserSession(user.id, "/dashboard/apps", !!remember);
+  return createUserSession(user.id, "/dashboard", !!remember);
 }
 
 export async function loader({ request }: LoaderArgs) {
   const userId = await getUserId(request);
   if (userId) {
-    return redirect("/dashboard/apps");
+    return redirect("/dashboard");
   }
 
   return null;
@@ -137,7 +137,7 @@ export default function LogIn() {
 
               <div className="space-y-1">
                 <label
-                  htmlFor="email"
+                  htmlFor="password"
                   className="block text-sm font-medium text-warm-gray-900"
                 >
                   Password
@@ -146,7 +146,7 @@ export default function LogIn() {
                   <input
                     type="password"
                     name="password"
-                    id="email"
+                    id="password"
                     className="py-3 px-4 block w-full shadow-sm text-black focus:ring-black focus:border-black border-warm-gray-300 rounded-md"
                     aria-invalid={Boolean(actionData?.fieldsErrors?.password)}
                     aria-errormessage={
