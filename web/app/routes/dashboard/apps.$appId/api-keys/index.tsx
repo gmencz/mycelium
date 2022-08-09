@@ -20,6 +20,9 @@ export async function loader({ params, request }: LoaderArgs) {
       secret: true,
       createdAt: true,
     },
+    orderBy: {
+      createdAt: "desc",
+    },
   });
 
   return json({ apiKeys });
@@ -73,7 +76,7 @@ function ApiKeyRow({ apiKey }: ApiKeyRowProps) {
       <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
         <Link
           to={apiKey.id}
-          className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30"
+          className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30"
         >
           <PencilIcon className="w-4 h-4" />
 
