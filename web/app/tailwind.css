@@ -1070,10 +1070,6 @@ select {
   flex-direction: column;
 }
 
-.place-items-center {
-  place-items: center;
-}
-
 .items-start {
   align-items: flex-start;
 }
@@ -1784,10 +1780,6 @@ body {
     margin-top: 0px;
   }
 
-  .sm\:mt-px {
-    margin-top: 1px;
-  }
-
   .sm\:ml-16 {
     margin-left: 4rem;
   }
@@ -1862,10 +1854,6 @@ body {
 
   .sm\:pt-5 {
     padding-top: 1.25rem;
-  }
-
-  .sm\:pt-2 {
-    padding-top: 0.5rem;
   }
 
   .sm\:pl-6 {
