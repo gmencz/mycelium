@@ -1,9 +1,9 @@
 import {
-  AdjustmentsIcon,
+  Cog6ToothIcon,
   BookOpenIcon,
   ChartBarIcon,
   KeyIcon,
-} from "@heroicons/react/outline";
+} from "@heroicons/react/20/solid";
 import { NavLink, Outlet } from "@remix-run/react";
 import clsx from "clsx";
 
@@ -11,7 +11,7 @@ const navigation = [
   { name: "Overview", to: ".", icon: BookOpenIcon, end: true },
   { name: "API Keys", to: "api-keys", icon: KeyIcon },
   { name: "Analytics", to: "analytics", icon: ChartBarIcon },
-  { name: "Settings", to: "settings", icon: AdjustmentsIcon },
+  { name: "Settings", to: "settings", icon: Cog6ToothIcon },
 ];
 
 export default function AppLayout() {

@@ -1,6 +1,10 @@
 import { Link } from "@remix-run/react";
 import { Menu, Popover, Transition } from "@headlessui/react";
-import { ChevronDownIcon, MenuIcon, XIcon } from "@heroicons/react/outline";
+import {
+  ChevronDownIcon,
+  Bars3Icon,
+  XMarkIcon,
+} from "@heroicons/react/20/solid";
 import type { ComponentProps, FunctionComponent } from "react";
 import { Fragment } from "react";
 import clsx from "clsx";
@@ -45,7 +49,7 @@ export default function PublicFacingNavbar({
         <Popover>
           <Popover.Button className="bg-gray-50 md:hidden rounded-md p-2 inline-flex items-center justify-center text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-black">
             <span className="sr-only">Open main menu</span>
-            <MenuIcon className="h-6 w-6" aria-hidden="true" />
+            <Bars3Icon className="h-6 w-6" aria-hidden="true" />
           </Popover.Button>
 
           <Transition
@@ -74,7 +78,7 @@ export default function PublicFacingNavbar({
                   <div className="-mr-2">
                     <Popover.Button className="bg-white rounded-md p-2 inline-flex items-center justify-center text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-black">
                       <span className="sr-only">Close menu</span>
-                      <XIcon className="h-6 w-6" aria-hidden="true" />
+                      <XMarkIcon className="h-6 w-6" aria-hidden="true" />
                     </Popover.Button>
                   </div>
                 </div>

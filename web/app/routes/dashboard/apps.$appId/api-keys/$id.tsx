@@ -1,4 +1,8 @@
-import { EyeIcon, EyeOffIcon, RefreshIcon } from "@heroicons/react/solid";
+import {
+  EyeIcon,
+  EyeSlashIcon,
+  ArrowPathIcon,
+} from "@heroicons/react/20/solid";
 import type { ActionArgs, LoaderArgs } from "@remix-run/node";
 import { redirect } from "@remix-run/node";
 import { json } from "@remix-run/node";
@@ -201,7 +205,7 @@ export default function ApiKey() {
                   {isSecretBlurred ? (
                     <EyeIcon className="w-5 h-5" />
                   ) : (
-                    <EyeOffIcon className="w-5 h-5" />
+                    <EyeSlashIcon className="w-5 h-5" />
                   )}
                 </button>
               </div>
@@ -215,7 +219,7 @@ export default function ApiKey() {
                 type="button"
                 className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30"
               >
-                <RefreshIcon className="w-4 h-4" />
+                <ArrowPathIcon className="w-4 h-4" />
 
                 <span>Reset secret</span>
               </button>

@@ -1,5 +1,5 @@
-import { EyeOffIcon } from "@heroicons/react/outline";
-import { EyeIcon, PencilIcon } from "@heroicons/react/solid";
+import { EyeSlashIcon } from "@heroicons/react/20/solid";
+import { EyeIcon, PencilIcon } from "@heroicons/react/20/solid";
 import type { LoaderArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Link, useLoaderData } from "@remix-run/react";
@@ -68,7 +68,7 @@ function ApiKeyRow({ apiKey }: ApiKeyRowProps) {
             {isSecretBlurred ? (
               <EyeIcon className="w-5 h-5" />
             ) : (
-              <EyeOffIcon className="w-5 h-5" />
+              <EyeSlashIcon className="w-5 h-5" />
             )}
           </button>
         </div>
