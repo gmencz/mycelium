@@ -48,6 +48,9 @@ function ApiKeyRow({ apiKey }: ApiKeyRowProps) {
       <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
         {new Date(apiKey.createdAt).toDateString()}
       </td>
+      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+        {apiKey.id}
+      </td>
       <td className="whitespace-nowrap px-3 py-4 text-sm">
         <div className="flex items-center gap-3">
           <span
@@ -111,6 +114,7 @@ export default function AppApiKeys() {
           </Link>
         </div>
       </div>
+
       <div className="overflow-x-auto flex-1 mt-8">
         <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
           <table className="min-w-full divide-y divide-gray-300">
@@ -127,6 +131,12 @@ export default function AppApiKeys() {
                   className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900"
                 >
                   Created
+                </th>
+                <th
+                  scope="col"
+                  className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900"
+                >
+                  ID
                 </th>
                 <th
                   scope="col"
