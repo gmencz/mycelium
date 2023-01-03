@@ -1,0 +1,22 @@
+name = "mycelium-carbon"
+main = "dist/index.mjs"
+compatibility_date = "2022-05-28"
+compatibility_flags = []
+
+kv_namespaces = [
+  { binding = "APPS", id = "4cac25ce509a4bb2ba9569079bc2e691" }
+]
+
+[durable_objects]
+bindings = [
+  { name = "CHANNEL_GROUP", class_name = "ChannelGroup" },
+  { name = "CHANNEL", class_name = "Channel" }
+]
+
+[build]
+command = "node build.js"
+
+[miniflare]
+kv_persist = true
+cache_persist = true
+durable_objects_persist = true
