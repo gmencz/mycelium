@@ -1,3 +1,4 @@
+import { Bindings } from "@/bindings";
 import {
   FromReplicaMessage,
   toReplicaBroadcastSchema,
@@ -5,7 +6,6 @@ import {
   toReplicaMessageSchema,
 } from "@/messaging/internal";
 import { closeEvents, User } from "@/messaging/shared";
-import { Bindings } from "@/types";
 import { Replica, Socket } from "dog";
 
 export class Channel extends Replica<Bindings> {
@@ -13,8 +13,8 @@ export class Channel extends Replica<Bindings> {
 
   link(env: Bindings) {
     return {
-      parent: env.CHANNEL_GROUP as any,
-      self: env.CHANNEL as any,
+      parent: env.CHANNEL_GROUP,
+      self: env.CHANNEL,
     };
   }
 
