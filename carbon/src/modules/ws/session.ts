@@ -7,11 +7,7 @@ export const startSession = async (server: WebSocket, app: App, c: Context) => {
   // The channels to which the client is subscribed to.
   const channels = new Map<string, WebSocket>();
 
-  // Intervals that need to be cleared on disconnect.
-  const intervals = new Map<string, number>();
-
   const endSession = () => {
-    intervals.forEach(clearInterval);
     channels.forEach((webSocket) => {
       webSocket.close();
     });
@@ -20,12 +16,12 @@ export const startSession = async (server: WebSocket, app: App, c: Context) => {
   server.addEventListener("close", endSession);
   server.addEventListener("error", endSession);
   server.addEventListener("message", (event) => {
-    handleClientMessage(event, server, app, c, channels, intervals);
+    handleClientMessage(event, server, app, c, channels);
   });
 
   const connectedMessage = makeServerToClientMessage({
     opCode: ServerToClientOpCode.Connected,
   });
 
-  server.send(connectedMessage);
+  server.send(connectedMessage as string);
 };

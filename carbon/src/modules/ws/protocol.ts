@@ -1,5 +1,4 @@
 import { User } from "../auth";
-import { ClientMessage } from "./message";
 
 export enum CloseCode {
   MISSING_APP_ID = 4000,
@@ -11,40 +10,70 @@ export enum CloseCode {
   INTERNAL_SERVER_ERROR = 4006,
   NOT_SUBSCRIBED = 4007,
   INVALID_MESSAGE_DATA = 4008,
+  ALREADY_SUBSCRIBED_TO_CHANNEL = 4009,
+  NOT_SUBSCRIBED_TO_CHANNEL = 4010,
+  FAILED_TO_UNSUBSCRIBE = 4011,
 }
 
 export enum ServerToClientOpCode {
   Connected = 0,
+  ReceivedMessage = 1,
+  UserSubscribed = 2,
+  UserUnsubscribed = 3,
+  Pong = 4,
 }
 
 export enum ClientToServerOpCode {
   Subscribe = 0,
   Unsubscribe = 1,
   Publish = 2,
+  Ping = 3,
 }
 
 export enum ServerToChannelOpCode {
   Ping = 0,
   Hello = 1,
+  Broadcast = 2,
 }
 
 export interface ServerToChannelHelloMessage {
-  user: User | null;
+  u: User | null;
+}
+
+export interface ServerToChannelBroadcastMessage {
+  m: string;
+}
+
+export interface ServerToClientReceivedBroadcastMessage {
+  m: string;
+}
+
+export interface ServerToClientUserSubscribedMessage {
+  u: User | "anon";
 }
 
 export interface ServerToChannelMessage {
   opCode: ServerToChannelOpCode;
-  data?: ServerToChannelHelloMessage;
+  data?: ServerToChannelHelloMessage | ServerToChannelBroadcastMessage;
 }
 
 export interface ServerToClientMessage {
   opCode: ServerToClientOpCode;
+  data?:
+    | ServerToClientReceivedBroadcastMessage
+    | ServerToClientUserSubscribedMessage;
 }
 
-export const makeServerToClientMessage = (message: ServerToClientMessage) => {
-  return JSON.stringify({
+export const makeServerToClientMessage = (
+  message: ServerToClientMessage,
+  toJSON: boolean = true
+) => {
+  const minified = {
     op: message.opCode,
-  });
+    d: message.data,
+  };
+
+  return toJSON ? JSON.stringify(minified) : minified;
 };
 
 export const makeServerToChannelMessage = (message: ServerToChannelMessage) => {
@@ -54,4 +83,4 @@ export const makeServerToChannelMessage = (message: ServerToChannelMessage) => {
   });
 };
 
-export const serverToReplicaPingInterval = 30000; // 30 seconds
+export const serverToChannelPingInterval = 30000; // 30 seconds

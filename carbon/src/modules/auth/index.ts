@@ -1,7 +1,7 @@
 import { z } from "zod";
 import jwt from "@tsndr/cloudflare-worker-jwt";
 
-const userSchema = z.object({
+export const userSchema = z.object({
   id: z.string(),
   details: z.record(z.unknown()),
 });

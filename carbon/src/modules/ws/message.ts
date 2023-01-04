@@ -9,11 +9,13 @@ import { clientUnsubscribeSchema } from "./router/unsubscribe";
 
 const clientMessageSchema = z.object({
   op: z.nativeEnum(ClientToServerOpCode),
-  d: z.union([
-    clientPublishSchema,
-    clientSubscribeSchema,
-    clientUnsubscribeSchema,
-  ]),
+  d: z
+    .union([
+      clientPublishSchema,
+      clientSubscribeSchema,
+      clientUnsubscribeSchema,
+    ])
+    .optional(),
 });
 
 export type ClientMessage = z.TypeOf<typeof clientMessageSchema>;
@@ -23,8 +25,7 @@ export const handleClientMessage = (
   server: WebSocket,
   app: App,
   c: Context,
-  channels: Map<string, WebSocket>,
-  intervals: Map<string, number>
+  channels: Map<string, WebSocket>
 ) => {
   let message;
   try {
@@ -33,5 +34,5 @@ export const handleClientMessage = (
     return server.close(CloseCode.INVALID_MESSAGE);
   }
 
-  routeClientMessage(message, server, app, c, channels, intervals);
+  routeClientMessage(message, server, app, c, channels);
 };

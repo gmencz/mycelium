@@ -1,15 +1,34 @@
 import { Bindings } from "@/bindings";
+import { Message, Replica, Socket } from "dog";
+import { z } from "zod";
+import { User, userSchema } from "../auth";
 import {
-  FromReplicaMessage,
-  toReplicaBroadcastSchema,
-  toReplicaHelloSchema,
-  toReplicaMessageSchema,
-} from "@/messaging/internal";
-import { closeEvents, User } from "@/messaging/shared";
-import { Replica, Socket } from "dog";
+  makeServerToClientMessage,
+  ServerToChannelOpCode,
+  ServerToClientOpCode,
+} from "../ws/protocol";
+
+const messageSchema = z.object({
+  op: z.nativeEnum(ServerToChannelOpCode),
+  d: z
+    .union([
+      z.object({ u: userSchema.nullable() }),
+      z.object({ m: z.string() }),
+    ])
+    .optional(),
+});
+
+const helloMessageSchema = z.object({
+  u: userSchema.nullable(),
+});
+
+const broadcastMessageSchema = z.object({
+  m: z.string(),
+});
 
 export class Channel extends Replica<Bindings> {
   #user: User | null = null;
+  #connections: number = 0;
 
   link(env: Bindings) {
     return {
@@ -18,60 +37,105 @@ export class Channel extends Replica<Bindings> {
     };
   }
 
+  async onclose(socket: Socket) {
+    this.#connections--;
+    if (this.#connections === 0) {
+      const message = makeServerToClientMessage(
+        {
+          opCode: ServerToClientOpCode.UserUnsubscribed,
+          data: {
+            u: this.#user || "anon",
+          },
+        },
+        false
+      );
+
+      // Let everyone know a user unsubscribed.
+      socket.broadcast(message as Message, true);
+    }
+  }
+
   async onmessage(socket: Socket, data: string) {
     let message;
     try {
-      message = toReplicaMessageSchema.parse(JSON.parse(data));
+      message = messageSchema.parse(JSON.parse(data));
     } catch (error) {
-      return socket.close(
-        closeEvents.INVALID_MESSAGE.code,
-        closeEvents.INVALID_MESSAGE.message
+      console.error(
+        `[Channel replica ${socket.uid}] -> Invalid message received`
       );
+      return;
     }
 
-    if (message.type === "hello") {
-      let helloData;
-      try {
-        helloData = toReplicaHelloSchema.parse(message.data);
-      } catch (error) {
-        return socket.close(
-          closeEvents.INVALID_MESSAGE_DATA.code,
-          closeEvents.INVALID_MESSAGE_DATA.message
-        );
+    switch (message.op) {
+      case ServerToChannelOpCode.Hello: {
+        let helloData;
+        try {
+          helloData = helloMessageSchema.parse(message.d);
+        } catch (error) {
+          console.error(
+            `[Channel replica ${socket.uid}] -> Invalid 'hello' message received`
+          );
+          return;
+        }
+
+        this.#connections++;
+        this.#user = helloData.u;
+
+        // Let everyone know only on the first connection.
+        if (this.#connections === 1) {
+          const newMessage = makeServerToClientMessage(
+            {
+              opCode: ServerToClientOpCode.UserSubscribed,
+              data: {
+                u: this.#user || "anon",
+              },
+            },
+            false
+          );
+
+          // Let everyone know a user subscribed.
+          socket.broadcast(newMessage as Message, true);
+        }
+
+        break;
       }
 
-      let hadUser = !!this.#user;
-      this.#user = helloData.user;
-      if (!hadUser) {
-        const output: FromReplicaMessage = {
-          type: "user:subscribed",
-          data: {
-            user: this.#user || "anon",
+      case ServerToChannelOpCode.Broadcast: {
+        let broadcastData;
+        try {
+          broadcastData = broadcastMessageSchema.parse(message.d);
+        } catch (error) {
+          console.error(
+            `[Channel replica ${socket.uid}] -> Invalid 'broadcast' message received`
+          );
+          return;
+        }
+
+        const newMessage = makeServerToClientMessage(
+          {
+            opCode: ServerToClientOpCode.ReceivedMessage,
+            data: {
+              m: broadcastData.m,
+            },
           },
-        };
-
-        // Let everyone know a user subscribed.
-        socket.broadcast(output, true);
-      }
-    } else if (message.type === "broadcast") {
-      let broadcastData;
-      try {
-        broadcastData = toReplicaBroadcastSchema.parse(message.data);
-      } catch (error) {
-        return socket.close(
-          closeEvents.INVALID_MESSAGE_DATA.code,
-          closeEvents.INVALID_MESSAGE_DATA.message
+          false
         );
+
+        socket.broadcast(newMessage as Message, true);
+
+        break;
       }
 
-      const output: FromReplicaMessage = {
-        type: "user:published",
-        data: {
-          message: broadcastData.message,
-        },
-      };
+      case ServerToChannelOpCode.Ping: {
+        // Do nothing, this is just to keep the replica alive.
+        console.log(`[Channel replica ${socket.uid}] -> Pong`);
+        break;
+      }
 
-      socket.broadcast(output, true);
+      default: {
+        console.error("[Channel replica] -> Unknown message op code received");
+        return;
+      }
     }
   }
 

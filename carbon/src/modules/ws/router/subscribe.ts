@@ -8,7 +8,7 @@ import {
   makeServerToChannelMessage,
   ServerToChannelMessage,
   ServerToChannelOpCode,
-  serverToReplicaPingInterval,
+  serverToChannelPingInterval,
 } from "../protocol";
 
 export const clientSubscribeSchema = z.object({
@@ -23,13 +23,17 @@ export const clientSubscribe = async (
   server: WebSocket,
   app: App,
   c: Context,
-  channels: Map<string, WebSocket>,
-  intervals: Map<string, number>
+  channels: Map<string, WebSocket>
 ) => {
   try {
     clientSubscribeSchema.parse(data);
   } catch (error) {
     return server.close(CloseCode.INVALID_MESSAGE_DATA);
+  }
+
+  const isAlreadySubscribed = channels.has(data.c);
+  if (isAlreadySubscribed) {
+    return server.close(CloseCode.ALREADY_SUBSCRIBED_TO_CHANNEL);
   }
 
   const gid = c.env.CHANNEL_GROUP.idFromName(`${app.id}:${data.c}`);
@@ -63,20 +67,8 @@ export const clientSubscribe = async (
   }
   ws.accept();
 
-  const pingInterval = setInterval(() => {
-    const pingMessage = makeServerToChannelMessage({
-      opCode: ServerToChannelOpCode.Ping,
-    });
-
-    ws.send(pingMessage);
-  }, serverToReplicaPingInterval);
-
-  intervals.set(data.c, pingInterval);
-
   const handleErrorOrClose = () => {
     channels.delete(data.c);
-    clearInterval(pingInterval);
-    intervals.delete(data.c);
   };
 
   const handleMessage = (message: MessageEvent) => {
@@ -91,7 +83,7 @@ export const clientSubscribe = async (
   const helloMessage = makeServerToChannelMessage({
     opCode: ServerToChannelOpCode.Hello,
     data: {
-      user,
+      u: user,
     },
   });
 

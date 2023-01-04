@@ -1,4 +1,4 @@
-import { Bindings } from "@/types";
+import { Bindings } from "@/bindings";
 import { Group } from "dog";
 
 export class ChannelGroup extends Group<Bindings> {

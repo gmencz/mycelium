@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { CloseCode } from "../protocol";
+import {
+  CloseCode,
+  makeServerToChannelMessage,
+  ServerToChannelOpCode,
+} from "../protocol";
 
 export const clientUnsubscribeSchema = z.object({
   c: z.string().max(256, "Channel name is too long"), // Channel name
@@ -7,11 +11,10 @@ export const clientUnsubscribeSchema = z.object({
 
 export type ClientUnsubscribe = z.TypeOf<typeof clientUnsubscribeSchema>;
 
-export const clientUnsubscribe = (
+export const clientUnsubscribe = async (
   data: ClientUnsubscribe,
   server: WebSocket,
-  channels: Map<string, WebSocket>,
-  intervals: Map<string, number>
+  channels: Map<string, WebSocket>
 ) => {
   try {
     clientUnsubscribeSchema.parse(data);
@@ -19,5 +22,11 @@ export const clientUnsubscribe = (
     return server.close(CloseCode.INVALID_MESSAGE_DATA);
   }
 
-  // TODO
+  const channel = channels.get(data.c);
+  if (!channel) {
+    return server.close(CloseCode.NOT_SUBSCRIBED_TO_CHANNEL);
+  }
+
+  channel.close();
+  channels.delete(data.c);
 };
