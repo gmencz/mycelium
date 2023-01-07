@@ -1,4 +1,4 @@
-import { Bindings } from "@/types";
+import { Bindings } from "@/bindings";
 
 declare global {
   function getMiniflareBindings(): Bindings;

@@ -8,27 +8,23 @@ import {
   ServerToClientOpCode,
 } from "../ws/protocol";
 
-const messageSchema = z.object({
-  op: z.nativeEnum(ServerToChannelOpCode),
-  d: z
-    .union([
-      z.object({ u: userSchema.nullable() }),
-      z.object({ m: z.string() }),
-    ])
-    .optional(),
-});
-
-const helloMessageSchema = z.object({
-  u: userSchema.nullable(),
-});
+const helloMessageSchema = z
+  .object({
+    u: userSchema.nullable(),
+  })
+  .optional();
 
 const broadcastMessageSchema = z.object({
   m: z.string(),
 });
 
+const messageSchema = z.object({
+  op: z.nativeEnum(ServerToChannelOpCode),
+  d: z.union([helloMessageSchema, broadcastMessageSchema]).optional(),
+});
+
 export class Channel extends Replica<Bindings> {
-  #user: User | null = null;
-  #connections: number = 0;
+  #users = new Map<string, User>();
 
   link(env: Bindings) {
     return {
@@ -38,13 +34,13 @@ export class Channel extends Replica<Bindings> {
   }
 
   async onclose(socket: Socket) {
-    this.#connections--;
-    if (this.#connections === 0) {
+    const user = this.#users.get(socket.uid);
+    if (user) {
       const message = makeServerToClientMessage(
         {
           opCode: ServerToClientOpCode.UserUnsubscribed,
           data: {
-            u: this.#user || "anon",
+            u: user,
           },
         },
         false
@@ -66,6 +62,8 @@ export class Channel extends Replica<Bindings> {
       return;
     }
 
+    console.log({ users: this.#users });
+
     switch (message.op) {
       case ServerToChannelOpCode.Hello: {
         let helloData;
@@ -78,23 +76,23 @@ export class Channel extends Replica<Bindings> {
           return;
         }
 
-        this.#connections++;
-        this.#user = helloData.u;
-
-        // Let everyone know only on the first connection.
-        if (this.#connections === 1) {
-          const newMessage = makeServerToClientMessage(
-            {
-              opCode: ServerToClientOpCode.UserSubscribed,
-              data: {
-                u: this.#user || "anon",
+        const hadUser = this.#users.has(socket.uid);
+        if (helloData?.u) {
+          this.#users.set(socket.uid, helloData.u);
+          if (!hadUser) {
+            const newMessage = makeServerToClientMessage(
+              {
+                opCode: ServerToClientOpCode.UserSubscribed,
+                data: {
+                  u: helloData.u,
+                },
               },
-            },
-            false
-          );
+              false
+            );
 
-          // Let everyone know a user subscribed.
-          socket.broadcast(newMessage as Message, true);
+            // Let everyone know a new user subscribed.
+            socket.broadcast(newMessage as Message, true);
+          }
         }
 
         break;
@@ -111,18 +109,32 @@ export class Channel extends Replica<Bindings> {
           return;
         }
 
-        const newMessage = makeServerToClientMessage(
-          {
-            opCode: ServerToClientOpCode.ReceivedMessage,
-            data: {
-              m: broadcastData.m,
+        let newMessage;
+        const user = this.#users.get(socket.uid);
+        if (user) {
+          newMessage = makeServerToClientMessage(
+            {
+              opCode: ServerToClientOpCode.ReceivedMessage,
+              data: {
+                m: broadcastData.m,
+                u: user,
+              },
             },
-          },
-          false
-        );
+            false
+          );
+        } else {
+          newMessage = makeServerToClientMessage(
+            {
+              opCode: ServerToClientOpCode.ReceivedMessage,
+              data: {
+                m: broadcastData.m,
+              },
+            },
+            false
+          );
+        }
 
         socket.broadcast(newMessage as Message, true);
-
         break;
       }
 
@@ -133,7 +145,9 @@ export class Channel extends Replica<Bindings> {
       }
 
       default: {
-        console.error("[Channel replica] -> Unknown message op code received");
+        console.error(
+          `[Channel replica ${socket.uid}]] -> Unknown message op code received: ${message.op}`
+        );
         return;
       }
     }

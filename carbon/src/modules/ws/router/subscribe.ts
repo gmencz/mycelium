@@ -1,22 +1,23 @@
 import { Context } from "@/bindings";
 import { App } from "@/modules/apps";
-import { getUserFromJWT, User } from "@/modules/auth";
+import { getUserFromJWT } from "@/modules/auth";
 import { identify } from "dog";
 import { z } from "zod";
 import {
   CloseCode,
   makeServerToChannelMessage,
-  ServerToChannelMessage,
   ServerToChannelOpCode,
-  serverToChannelPingInterval,
 } from "../protocol";
 
 export const clientSubscribeSchema = z.object({
   c: z.string().max(256, "Channel name is too long"), // Channel name
-  ut: z.string().optional(), // User token (optional). If not provided, the user is anonymous.
+  ut: z.string().optional(), // User token (only for private channels)
 });
 
 export type ClientSubscribe = z.TypeOf<typeof clientSubscribeSchema>;
+
+const isPrivateChannel = (channelName: string) =>
+  channelName.startsWith("private-");
 
 export const clientSubscribe = async (
   data: ClientSubscribe,
@@ -36,29 +37,46 @@ export const clientSubscribe = async (
     return server.close(CloseCode.ALREADY_SUBSCRIBED_TO_CHANNEL);
   }
 
+  let reqid: string | null;
+  let helloMessage: string;
   const gid = c.env.CHANNEL_GROUP.idFromName(`${app.id}:${data.c}`);
+  const isPrivate = isPrivateChannel(data.c);
+  if (isPrivate) {
+    if (!data.ut) {
+      return server.close(CloseCode.MISSING_USER_TOKEN);
+    }
 
-  let user: User | null = null;
-  if (data.ut) {
+    let user;
     try {
       user = await getUserFromJWT(data.ut, app.secret);
     } catch (error) {
       return server.close(CloseCode.INVALID_USER_TOKEN);
     }
+
+    reqid = user.id;
+    helloMessage = makeServerToChannelMessage({
+      opCode: ServerToChannelOpCode.Hello,
+      data: {
+        u: user,
+      },
+    });
+  } else {
+    reqid = c.req.headers.get("CF-Connecting-IP");
+    helloMessage = makeServerToChannelMessage({
+      opCode: ServerToChannelOpCode.Hello,
+    });
   }
 
-  let reqid: string;
-  if (user) {
-    reqid = user.id;
-  } else {
-    const ip = c.req.headers.get("CF-Connecting-IP")!;
-    reqid = ip;
+  if (!reqid) {
+    return server.close(CloseCode.UNABLE_TO_OBTAIN_REQUEST_IDENTIFIER);
   }
 
   const replica = await identify(gid, reqid, {
     parent: c.env.CHANNEL_GROUP,
     child: c.env.CHANNEL,
   });
+
+  console.log({ replicaId: replica.id.toString(), reqid });
 
   const resp = await replica.fetch(c.req);
   const ws = resp.webSocket;
@@ -79,13 +97,6 @@ export const clientSubscribe = async (
   ws.addEventListener("error", handleErrorOrClose);
   ws.addEventListener("close", handleErrorOrClose);
   ws.addEventListener("message", handleMessage);
-
-  const helloMessage = makeServerToChannelMessage({
-    opCode: ServerToChannelOpCode.Hello,
-    data: {
-      u: user,
-    },
-  });
 
   ws.send(helloMessage);
   channels.set(data.c, ws);

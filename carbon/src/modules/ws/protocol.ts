@@ -13,6 +13,8 @@ export enum CloseCode {
   ALREADY_SUBSCRIBED_TO_CHANNEL = 4009,
   NOT_SUBSCRIBED_TO_CHANNEL = 4010,
   FAILED_TO_UNSUBSCRIBE = 4011,
+  MISSING_USER_TOKEN = 4012,
+  UNABLE_TO_OBTAIN_REQUEST_IDENTIFIER = 4013,
 }
 
 export enum ServerToClientOpCode {
@@ -49,7 +51,7 @@ export interface ServerToClientReceivedBroadcastMessage {
 }
 
 export interface ServerToClientUserSubscribedMessage {
-  u: User | "anon";
+  u: User;
 }
 
 export interface ServerToChannelMessage {
